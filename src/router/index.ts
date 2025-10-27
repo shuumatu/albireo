@@ -1,12 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import VideoPlayer from '../views/videoPlayer.vue'
 import MainPage from '../views/mainPage.vue'
 import Map from '../views/Map.vue'
 import ResourceGallery from '../views/ResourceGallery.vue'
+import VideoDetail from '../views/VideoDetail.vue'
+import VideoPlayer from '../components/VideoPlayer.vue'
 
 const routes = [
     {
-        path: '/video/:uuid',
+        path: '/video/',
         name: 'VideoPlayer',
         component:VideoPlayer
     },
