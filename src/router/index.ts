@@ -7,9 +7,9 @@ import VideoPlayer from '../components/VideoPlayer.vue'
 
 const routes = [
     {
-        path: '/video/',
+        path: '/video/:uuid',
         name: 'VideoPlayer',
-        component:VideoPlayer
+        component:VideoDetail
     },
     {
         path: '/',

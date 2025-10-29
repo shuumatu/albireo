@@ -17,6 +17,7 @@
     "@vue-leaflet/vue-leaflet": "^0.10.1",
     "@vueuse/motion": "^3.0.3",
     "axios": "^1.11.0",
+    "dayjs": "^1.11.18",
     "leaflet": "^1.9.4",
     "motion-v": "^1.7.4",
     "naive-ui": "^2.42.0",

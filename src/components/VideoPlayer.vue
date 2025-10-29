@@ -2,11 +2,12 @@
   <div class="video-player-container">
     <video-player
       ref="videoPlayerRef"
-      :src="currentSource.src"
+      :src="currentSource?.src || ''"
       :poster="poster"
       :controls="true"
       :playback-rates="playbackRates"
       :fluid="true"
+      :picture-in-picture="true"
       class="video-js vjs-big-play-centered theme-green"
       @mounted="handleMounted"
       @ready="handleReady"
@@ -14,56 +15,94 @@
   </div>
 </template>
 
-<script setup>
-import { ref, computed, onBeforeUnmount } from 'vue'
+<script setup lang="ts">
+import { ref, computed, onBeforeUnmount, onMounted, watch} from 'vue'
 import { VideoPlayer } from '@videojs-player/vue'
 import videojs from 'video.js'
 import 'video.js/dist/video-js.css'
+import type { VideoSource } from '../types/video'
 
+interface Props {
+  poster?: string
+  videoSources: VideoSource[]
+}
 
-
-// Props
-const props = defineProps({
-  poster: {
-    type: String,
-    default: ''
-  }
+const props = withDefaults(defineProps<Props>(), {
+  poster: ''
 })
 
-// 视频源配置（不同清晰度）
-const sources = ref([
-  {
-    src: 'https://albireo.shuumatu.com/videos/daa30485ae7b6bdf9a8edd07f72865874276efe80df429f39857328a449edef7/original/_DSC1319_1.mp4',
-    label: '原画',
-    type: 'video/mp4'
-  },
-  {
-    src: 'https://albireo.shuumatu.com/videos/daa30485ae7b6bdf9a8edd07f72865874276efe80df429f39857328a449edef7/1080p/1080p.mp4',
-    label: '1080P',
-    type: 'video/mp4'
-  },
-  {
-    src: 'https://albireo.shuumatu.com/videos/daa30485ae7b6bdf9a8edd07f72865874276efe80df429f39857328a449edef7/720p/720p.mp4',
-    label: '720P',
-    type: 'video/mp4'
-  },
-  {
-    src: 'https://albireo.shuumatu.com/videos/daa30485ae7b6bdf9a8edd07f72865874276efe80df429f39857328a449edef7/480p/480p.mp4',
-    label: '480P',
-    type: 'video/mp4'
-  }
-])
-
-// 播放速度选项
+const sources = ref<VideoSource[]>(props.videoSources)
 const playbackRates = ref([0.5, 0.75, 1, 1.25, 1.5, 2])
 
 // 状态
 const videoPlayerRef = ref(null)
 const player = ref(null)
 const currentQuality = ref(0)
-
+// 同步 props 到本地状态，并在数据变化时纠正 currentQuality
+watch(
+  () => props.videoSources,
+  (val) => {
+    sources.value = Array.isArray(val) ? val : []
+    if (currentQuality.value >= sources.value.length) {
+      currentQuality.value = 0
+    }
+  },
+  { immediate: true, deep: true }
+)
 // 当前选中的视频源
 const currentSource = computed(() => sources.value[currentQuality.value])
+
+// 键盘事件处理
+const handleKeydown = (event: KeyboardEvent) => {
+  if (!player.value) return
+  
+  // 如果焦点在输入框或文本区域，不处理键盘事件
+  const target = event.target as HTMLElement
+  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+    return
+  }
+  
+  switch (event.code) {
+    case 'Space':
+      // 空格键：播放/暂停
+      event.preventDefault()
+      if (player.value.paused()) {
+        player.value.play()
+      } else {
+        player.value.pause()
+      }
+      break
+      
+    case 'ArrowLeft':
+      // 左方向键：后退5秒
+      event.preventDefault()
+      const currentTimeLeft = player.value.currentTime()
+      player.value.currentTime(Math.max(0, currentTimeLeft - 3))
+      break
+      
+    case 'ArrowRight':
+      // 右方向键：前进5秒
+      event.preventDefault()
+      const currentTimeRight = player.value.currentTime()
+      const duration = player.value.duration()
+      player.value.currentTime(Math.min(duration, currentTimeRight + 3))
+      break
+      
+    case 'ArrowUp':
+      // 上方向键：增加音量（可选）
+      event.preventDefault()
+      const currentVolume = player.value.volume()
+      player.value.volume(Math.min(1, currentVolume + 0.1))
+      break
+      
+    case 'ArrowDown':
+      // 下方向键：减少音量（可选）
+      event.preventDefault()
+      const volume = player.value.volume()
+      player.value.volume(Math.max(0, volume - 0.1))
+      break
+  }
+}
 
 // 创建清晰度选择组件
 const createQualityComponents = (playerInstance) => {
@@ -71,53 +110,90 @@ const createQualityComponents = (playerInstance) => {
   const MenuItem = videojs.getComponent('MenuItem')
 
   // 清晰度菜单项
-  class QualityMenuItem extends MenuItem {
-    constructor(player, options) {
-      super(player, options)
-      this.qualityIndex = options.qualityIndex
-      this.qualityLabel = options.qualityLabel
-      this.selected(this.qualityIndex === currentQuality.value)
+class QualityMenuItem extends MenuItem {
+  constructor(player, options) {
+    super(player, options)
+    this.qualityIndex = options.qualityIndex
+    this.qualityLabel = options.qualityLabel
+    this.selected(this.qualityIndex === currentQuality.value)
+  }
+
+  handleClick() {
+    if (this.qualityIndex === currentQuality.value) {
+      return
     }
 
-    handleClick() {
-      // 如果点击的是当前清晰度，不做任何操作
-      if (this.qualityIndex === currentQuality.value) {
-        return
+    const previousQuality = currentQuality.value
+    const currentTime = this.player().currentTime()
+    const wasPaused = this.player().paused()
+    const currentRate = this.player().playbackRate()
+
+    // 先更新选中状态和索引
+    currentQuality.value = this.qualityIndex
+    
+    this.player().src({
+      src: sources.value[this.qualityIndex].src,
+      type: sources.value[this.qualityIndex].type
+    })
+    
+    // 监听加载成功
+    const onLoadedMetadata = () => {
+      this.player().currentTime(currentTime)
+      this.player().playbackRate(currentRate)
+      if (!wasPaused) {
+        this.player().play()
       }
-
-      const currentTime = this.player().currentTime()
-      const wasPaused = this.player().paused()
-      const currentRate = this.player().playbackRate() // 保存当前播放速度
-
-      // 更新当前清晰度
-      currentQuality.value = this.qualityIndex
+      // 清除错误监听
+      this.player().off('error', onError)
+    }
+    
+    // 监听加载失败
+    const onError = () => {
+      const error = this.player().error()
+      console.error(`清晰度 ${sources.value[this.qualityIndex].label} 加载失败:`, error)
       
-      // 切换视频源
+      // 清除成功监听
+      this.player().off('loadedmetadata', onLoadedMetadata)
+      
+      // 回退到之前的清晰度
+      currentQuality.value = previousQuality
+      console.log(`回退到 ${sources.value[previousQuality].label}`)
+      
       this.player().src({
-        src: sources.value[this.qualityIndex].src,
-        type: sources.value[this.qualityIndex].type
+        src: sources.value[previousQuality].src,
+        type: sources.value[previousQuality].type
       })
       
-      // 恢复播放状态和进度
+      // 恢复播放状态
       this.player().one('loadedmetadata', () => {
         this.player().currentTime(currentTime)
-        this.player().playbackRate(currentRate) // 恢复播放速度
+        this.player().playbackRate(currentRate)
         if (!wasPaused) {
           this.player().play()
         }
       })
       
-      // 更新所有菜单项的选中状态
-      const menuItems = this.player().controlBar.getChild('qualityMenuButton').items
-      menuItems.forEach(item => {
-        item.selected(item.qualityIndex === this.qualityIndex)
+      // 显示错误提示（可选）
+      this.player().trigger('qualitySwitchError', {
+        attemptedQuality: sources.value[this.qualityIndex].label,
+        fallbackQuality: sources.value[previousQuality].label
       })
-      
-      // 更新按钮显示文本
-      const button = this.player().controlBar.getChild('qualityMenuButton')
-      button.updateButtonText()
     }
+    
+    // 添加监听
+    this.player().one('loadedmetadata', onLoadedMetadata)
+    this.player().one('error', onError)
+    
+    // 更新菜单选中状态
+    const menuItems = this.player().controlBar.getChild('qualityMenuButton').items
+    menuItems.forEach(item => {
+      item.selected(item.qualityIndex === this.qualityIndex)
+    })
+    
+    const button = this.player().controlBar.getChild('qualityMenuButton')
+    button.updateButtonText()
   }
+}
 
   // 清晰度菜单按钮
   class QualityMenuButton extends MenuButton {
@@ -136,6 +212,10 @@ const createQualityComponents = (playerInstance) => {
     }
 
     createItems() {
+      // 确保有视频源才创建菜单项
+      if (!sources.value.length) {
+        return []
+      }
       const items = sources.value.map((source, index) => {
         return new QualityMenuItem(this.player(), {
           label: source.label,
@@ -147,14 +227,15 @@ const createQualityComponents = (playerInstance) => {
     }
 
     updateButtonText() {
+      // 安全检查：确保 sources 和当前索引有效
+      if (!sources.value.length || !sources.value[currentQuality.value]) {
+        return
+      }
       const currentLabel = sources.value[currentQuality.value].label
-
-       // 更新图标内容
       const iconEl = this.el().querySelector('.vjs-icon-placeholder')
       if (iconEl) {
         iconEl.setAttribute('data-quality', currentLabel)
       }
-      // 更新按钮文本
       const labelEl = this.el().querySelector('.vjs-menu-button-text')
       if (labelEl) {
         labelEl.textContent = currentLabel
@@ -162,12 +243,19 @@ const createQualityComponents = (playerInstance) => {
     }
   }
 
-  // 注册组件
   videojs.registerComponent('QualityMenuButton', QualityMenuButton)
 }
 
 // 生命周期
+onMounted(() => {
+  // 添加键盘事件监听
+  window.addEventListener('keydown', handleKeydown)
+})
+
 onBeforeUnmount(() => {
+  // 移除键盘事件监听
+  window.removeEventListener('keydown', handleKeydown)
+  
   if (player.value) {
     player.value.dispose()
   }
@@ -182,42 +270,35 @@ const handleMounted = ({ player: videoPlayer }) => {
 const handleReady = () => {
   console.log('播放器已就绪')
   
-  if (!player.value) return
+  if (!player.value || !sources.value.length) {
+    console.warn('播放器或视频源未就绪')
+    return
+  }
   
   try {
-    // 注册自定义清晰度组件
     createQualityComponents(player.value)
     
-    // 获取控制栏
     const controlBar = player.value.controlBar
+
     
-    // 移动音量控制到合适的位置
-    // 获取音量面板组件
     const volumePanel = controlBar.getChild('VolumePanel')
     
     if (volumePanel) {
-      // 移除音量面板
       controlBar.removeChild(volumePanel)
-      
-      // 找到播放速度按钮的位置
       const playbackRateMenu = controlBar.getChild('PlaybackRateMenuButton')
       
       if (playbackRateMenu) {
         const playbackRateIndex = controlBar.children().indexOf(playbackRateMenu)
-        // 在播放速度按钮之前插入音量控制
         controlBar.addChild(volumePanel, {}, playbackRateIndex)
       } else {
-        // 如果找不到播放速度按钮，放在倒数第二的位置
         const insertIndex = controlBar.children().length - 1
         controlBar.addChild(volumePanel, {}, insertIndex)
       }
     }
 
-    // 找到画中画按钮的位置（如果存在）
     const pipToggle = controlBar.getChild('PictureInPictureToggle')
     const fullscreenToggle = controlBar.getChild('FullscreenToggle')
     
-    // 计算插入位置
     let insertIndex
     if (pipToggle) {
       insertIndex = controlBar.children().indexOf(pipToggle)
@@ -227,15 +308,35 @@ const handleReady = () => {
       insertIndex = controlBar.children().length
     }
     
-    // 添加清晰度按钮
     const qualityButton = controlBar.addChild('QualityMenuButton', {}, insertIndex)
     
-    // 初始化按钮文本
     setTimeout(() => {
       qualityButton.updateButtonText()
     }, 0)
     
     console.log('清晰度按钮已添加到控制栏')
+    
+    // 移除 Video.js 控件聚焦问题
+    const playerEl = player.value.el()
+
+    // 捕获所有 focus 事件
+    playerEl.addEventListener(
+      'focus',
+      (e) => {
+        const target = e.target as HTMLElement
+        if (
+          target.classList.contains('vjs-control') || // 普通控件
+          target.closest('.vjs-menu-button') ||       // 菜单类控件（倍速、清晰度等）
+          target.classList.contains('vjs-picture-in-picture-control') ||
+          target.classList.contains('vjs-fullscreen-control')
+        ) {
+          target.blur()
+          e.stopPropagation()
+        }
+      },
+      true // ⚠️ 使用捕获阶段，确保在 Video.js 内部处理前生效
+    )
+
   } catch (error) {
     console.error('初始化清晰度按钮失败:', error)
   }
@@ -258,25 +359,25 @@ const handleReady = () => {
 
 /* 控制栏尺寸调整 */
 .theme-green .vjs-control-bar {
-  height: 3.5em; /* 调整控制栏高度，默认是3em */
-  font-size: 14px; /* 调整整体字体大小 */
-  background: rgba(0, 0, 0, 0); /* 半透明黑色背景 */
+  height: 3.5em;
+  font-size: 14px;
+  background: rgba(0, 0, 0, 0);
 }
 
 /* 按钮尺寸 */
 .theme-green .vjs-control {
-  width: 3.5em; /* 调整按钮宽度 */
+  width: 3.5em;
 }
 
 /* 大播放按钮 - 绿色 */
 .theme-green .vjs-big-play-button {
-  background-color: rgba(0, 208, 132, 0.7); /* 半透明绿色 */
+  background-color: rgba(0, 208, 132, 0.7);
   border: 0.06666em solid rgba(0, 208, 132, 0.8);
   border-radius: 50%;
-  width: 2em; /* 调整大播放按钮尺寸 */
+  width: 2em;
   height: 2em;
   line-height: 2em;
-  font-size: 3em; /* 调整图标大小 */
+  font-size: 3em;
   transition: all 0.3s;
 }
 
@@ -322,7 +423,7 @@ const handleReady = () => {
 
 /* 菜单背景半透明 */
 .theme-green .vjs-menu .vjs-menu-content{
-  background-color: rgba(101, 255, 124, 0.1); /* 半透明菜单背景 */
+  background-color: rgba(101, 255, 124, 0.1);
 }
 
 /* 菜单项选中状态 */
@@ -357,13 +458,10 @@ const handleReady = () => {
   font-size: 1.2em;
   font-weight: bold;
   line-height: 2.5;
-  
 }
 
-
-
 .vjs-quality-menu-button .vjs-menu-button-text {
-  display: none; /* 隐藏文本，只显示图标中的清晰度 */
+  display: none;
 }
 
 /* 菜单项样式 */
@@ -402,7 +500,7 @@ const handleReady = () => {
 /* 响应式 */
 @media (max-width: 768px) {
   .theme-green .vjs-control-bar {
-    font-size: 12px; /* 移动端更小的字体 */
+    font-size: 12px;
   }
   
   .vjs-quality-menu-button .vjs-icon-placeholder::before {
