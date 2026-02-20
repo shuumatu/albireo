@@ -4,6 +4,7 @@ import Map from '../views/Map.vue'
 import ResourceGallery from '../views/ResourceGallery.vue'
 import VideoDetail from '../views/VideoDetail.vue'
 import VideoPlayer from '../components/VideoPlayer.vue'
+import TimeLine from '../views/TimeLine.vue'
 
 const routes = [
     {
@@ -25,6 +26,11 @@ const routes = [
         path: '/gallery',
         name: 'Gallery',
         component:ResourceGallery
+    },
+    {
+        path:'/timneline',
+        name:'Timeline',
+        component:TimeLine
     }
 
 

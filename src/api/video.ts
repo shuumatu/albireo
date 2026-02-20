@@ -1,10 +1,10 @@
 import request from "../utils/request";
 
 interface videoData {
-  url: string;
+  objectKey: string;
   title: string;
   description: string;
-  thumbnailUrl: string;
+  coverUrl: string;
   createdAt: string;
   tags:Array<{ id: number; name: string }>
 }

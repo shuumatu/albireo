@@ -274,6 +274,7 @@ import VideoPlayer from '../components/VideoPlayer.vue'
 import type { VideoSource } from '../types/video'
 import { useRoute } from 'vue-router'
 import { getVideoInfo } from '../api/video'
+import { getSystemConfig } from '../api/systemConfig'
 import dayjs from 'dayjs'  // 导入 dayjs
 import { NSpin } from 'naive-ui'
 
@@ -300,17 +301,34 @@ const videoData = ref({
 })
 async function fetchVideoInfo() {
   try {
-    const response = await getVideoInfo(uuid as string)
+    // 并行获取视频信息和自定义域名配置
+    const [videoResponse, customDomainConfig] = await Promise.all([
+      getVideoInfo(uuid as string),
+      getSystemConfig('storage', 'custom_domain').catch(() => null) // 如果获取失败，返回 null
+    ])
     
     // 更新视频信息
-    videoData.value.title = response.title
-    videoData.value.description = response.description
+    videoData.value.title = videoResponse.title
+    videoData.value.description = videoResponse.description
     // 使用 dayjs 格式化日期
-    videoData.value.createdAt = dayjs(response.createdAt).format('YYYY-MM-DD HH:mm')
-    videoData.value.tags = response.tags.map(tag => tag.name) // 将对象数组转换为字符串数组
+    videoData.value.createdAt = dayjs(videoResponse.createdAt).format('YYYY-MM-DD HH:mm')
+    videoData.value.tags = videoResponse.tags.map(tag => tag.name) // 将对象数组转换为字符串数组
     
-    // 更新视频源
-    const originalUrl = response.url
+    // 获取 objectKey（优先使用 objectKey，如果没有则使用 url）
+    const objectKey = videoResponse.objectKey || (videoResponse as any).url || ''
+    
+    // 获取自定义域名，如果没有配置则使用默认值
+    const customDomain = customDomainConfig?.value || 'albireo.shuumatu.com'
+    
+    // 确保域名包含协议
+    const domain = customDomain.startsWith('http') ? customDomain : `https://${customDomain}`
+    
+    // 构建完整 URL：域名 + objectKey
+    // objectKey 格式如：videos/f06e9f133f7d404fbd711584993b1b4d1d24af90df04211d55362ff04fb0b493/original/C0068.mp4
+    // 确保 objectKey 不以 / 开头，避免双斜杠
+    const normalizedObjectKey = objectKey.startsWith('/') ? objectKey.slice(1) : objectKey
+    const originalUrl = `${domain}/${normalizedObjectKey}`
+    
     // 提取基础路径（去掉 /original/文件名 部分）
     const basePath = originalUrl.replace(/\/original\/[^/]*$/, '')
     
@@ -337,11 +355,27 @@ async function fetchVideoInfo() {
       }
     ]
     
+    console.log('Object Key:', objectKey)
+    console.log('自定义域名:', customDomain)
+    console.log('完整域名:', domain)
     console.log('原始 URL:', originalUrl)
     console.log('基础路径:', basePath)
     console.log('所有视频源:', videoSources.value)
-    // 更新封面图
-    posterUrl.value = response.thumbnailUrl
+    
+    // 更新封面图（如果 thumbnailUrl 也需要拼接域名）
+    if (videoResponse.coverUrl) {
+      // 如果 coverUrl 是完整的 URL，直接使用；如果是 objectKey，则拼接域名
+      const coverUrl = videoResponse.coverUrl.startsWith('http') 
+        ? videoResponse.coverUrl 
+        : `${domain}/${videoResponse.coverUrl.startsWith('/') ? videoResponse.coverUrl.slice(1) : videoResponse.coverUrl}`
+      posterUrl.value = coverUrl
+    } else if ((videoResponse as any).thumbnailUrl) {
+      const thumbnailUrl = (videoResponse as any).thumbnailUrl
+      const normalizedThumbnailUrl = thumbnailUrl.startsWith('http') 
+        ? thumbnailUrl 
+        : `${domain}/${thumbnailUrl.startsWith('/') ? thumbnailUrl.slice(1) : thumbnailUrl}`
+      posterUrl.value = normalizedThumbnailUrl
+    }
   } catch (error) {
     console.error('获取视频信息失败:', error)
     // 可以在这里添加错误提示
@@ -941,7 +975,7 @@ const themeOverrides = {
   align-items: center;
   justify-content: center;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   backdrop-filter: blur(10px);
 }
 

@@ -257,6 +257,10 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)
   
   if (player.value) {
+    // 调用自定义清理函数
+    if (player.value._customCleanup) {
+      player.value._customCleanup()
+    }
     player.value.dispose()
   }
 })
@@ -276,6 +280,19 @@ const handleReady = () => {
   }
   
   try {
+    // 设置用户不活动超时时间（1秒后隐藏控制栏）
+    player.value.options_.inactivityTimeout = 1000
+    
+    // 确保控制栏自动隐藏功能启用
+    player.value.options({
+      userActions: {
+        hotkeys: false // 禁用默认热键，使用我们自定义的
+      }
+    })
+    
+    // 手动触发用户活动，确保控制栏显示逻辑正常
+    player.value.userActive(true)
+    
     createQualityComponents(player.value)
     
     const controlBar = player.value.controlBar
@@ -316,7 +333,7 @@ const handleReady = () => {
     
     console.log('清晰度按钮已添加到控制栏')
     
-    // 移除 Video.js 控件聚焦问题
+    // 移除 Video.js 控件聚焦问题并设置鼠标事件
     const playerEl = player.value.el()
 
     // 捕获所有 focus 事件
@@ -336,6 +353,50 @@ const handleReady = () => {
       },
       true // ⚠️ 使用捕获阶段，确保在 Video.js 内部处理前生效
     )
+    
+    // 重要：移除之前可能存在的监听器，然后添加新的
+    let inactivityTimer = null
+    
+    const resetInactivityTimer = () => {
+      if (inactivityTimer) {
+        clearTimeout(inactivityTimer)
+      }
+      player.value.userActive(true)
+      
+      // 1秒后设置为不活动
+      inactivityTimer = setTimeout(() => {
+        player.value.userActive(false)
+      }, 1000)
+    }
+    
+    // 监听鼠标移动
+    playerEl.addEventListener('mousemove', resetInactivityTimer)
+    
+    // 鼠标离开立即隐藏
+    playerEl.addEventListener('mouseleave', () => {
+      if (inactivityTimer) {
+        clearTimeout(inactivityTimer)
+      }
+      player.value.userActive(false)
+    })
+    
+    // 鼠标进入显示控制栏
+    playerEl.addEventListener('mouseenter', () => {
+      resetInactivityTimer()
+    })
+    
+    // 清理函数
+    const cleanup = () => {
+      if (inactivityTimer) {
+        clearTimeout(inactivityTimer)
+      }
+      playerEl.removeEventListener('mousemove', resetInactivityTimer)
+      playerEl.removeEventListener('mouseleave', () => {})
+      playerEl.removeEventListener('mouseenter', () => {})
+    }
+    
+    // 保存清理函数以便后续使用
+    player.value._customCleanup = cleanup
 
   } catch (error) {
     console.error('初始化清晰度按钮失败:', error)
@@ -495,6 +556,18 @@ const handleReady = () => {
 .vjs-time-divider,
 .vjs-duration {
   display: block !important;
+}
+
+/* 确保控制栏在非活动时隐藏 */
+.video-js.vjs-user-inactive .vjs-control-bar {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+.video-js.vjs-user-active .vjs-control-bar {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* 响应式 */
