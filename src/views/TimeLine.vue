@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { getTimelineStatistics, getTimelineBucket, type TimelineStatistics, type TimelineBucket, type BucketPhoto, type MonthlyCount } from '../api/timeline'
+import { getSystemConfig } from '../api/systemConfig'
 
 interface Photo {
   id: string
@@ -63,6 +64,7 @@ const monthlyDistribution = ref<Map<string, number>>(new Map()) // key: "year-mo
 const loadedBuckets = ref<Map<string, TimelineBucket>>(new Map())
 const isInitializing = ref(true)
 const loadingError = ref<string>('')
+const customDomain = ref<string>('albireo.shuumatu.com') // 默认域名
 
 // 常量
 const PADDING_TOP = 32
@@ -101,6 +103,16 @@ const processImageUrl = (url: string, mediaType: string): string => {
   return url
 }
 
+// 处理视频 URL：将 /original/文件名 替换为 /thumbnails/thumbnail.jpg
+const processVideoUrl = (url: string): string => {
+  // 匹配 /original/文件名 的模式（文件名可能包含空格等特殊字符）
+  const originalPattern = /\/original\/[^/]*$/
+  if (originalPattern.test(url)) {
+    return url.replace(originalPattern, '/thumbnails/thumbnail.jpg')
+  }
+  return url
+}
+
 // 计算图片显示宽度
 const calculatePhotoWidth = (photo: Photo): number => {
   const FIXED_HEIGHT = 200
@@ -125,11 +137,52 @@ const handleImageLoad = (event: Event, photo: Photo) => {
 
 const getDisplayUrl = (photo: BucketPhoto): string => {
   const isVideo = photo.mediaType && (photo.mediaType.startsWith('video/') || photo.mediaType === 'video')
+  
   if (isVideo) {
-    return photo.coverUrl || ''
+    // 视频：使用 objectKey 生成缩略图 URL
+    // 优先使用 coverUrl（如果存在且是完整 URL）
+    if (photo.coverUrl && photo.coverUrl.startsWith('http')) {
+      return photo.coverUrl
+    }
+    
+    // 使用 objectKey 处理视频缩略图
+    const raw = photo.objectKey || ''
+    const processedUrl = processVideoUrl(raw)
+    
+    // 如果已经是完整 URL，直接返回
+    if (processedUrl.startsWith('http')) {
+      return processedUrl
+    }
+    
+    // 如果 coverUrl 存在但不是完整 URL，使用 coverUrl
+    if (photo.coverUrl) {
+      const domain = customDomain.value.startsWith('http') ? customDomain.value : `https://${customDomain.value}`
+      const normalizedCoverUrl = photo.coverUrl.startsWith('/') ? photo.coverUrl.slice(1) : photo.coverUrl
+      return `${domain}/${normalizedCoverUrl}`
+    }
+    
+    // 使用处理后的 objectKey 拼接域名
+    if (processedUrl) {
+      const domain = customDomain.value.startsWith('http') ? customDomain.value : `https://${customDomain.value}`
+      const normalizedUrl = processedUrl.startsWith('/') ? processedUrl.slice(1) : processedUrl
+      return `${domain}/${normalizedUrl}`
+    }
+    
+    return ''
   } else {
+    // 图片：使用 objectKey 处理并拼接域名
     const raw = photo.objectKey
-    return processImageUrl(raw, photo.mediaType) || raw
+    const processedUrl = processImageUrl(raw, photo.mediaType) || raw
+    
+    // 如果已经是完整 URL，直接返回
+    if (processedUrl.startsWith('http')) {
+      return processedUrl
+    }
+    
+    // 拼接域名
+    const domain = customDomain.value.startsWith('http') ? customDomain.value : `https://${customDomain.value}`
+    const normalizedUrl = processedUrl.startsWith('/') ? processedUrl.slice(1) : processedUrl
+    return `${domain}/${normalizedUrl}`
   }
 }
 
@@ -214,7 +267,9 @@ const timeGroups = computed((): TimeGroup[] => {
     if (bucket) {
       // 已加载数据，按天分组
       const dayGroups = new Map<number, BucketPhoto[]>()
-      bucket.photos.forEach(photo => {
+      // 使用 bucket.media 而不是 bucket.photos，因为后端返回的字段名是 media
+      const mediaList = bucket.media || []
+      mediaList.forEach(photo => {
         const photoDate = new Date(photo.createdAt)
         const day = photoDate.getDate()
         if (!dayGroups.has(day)) {
@@ -257,7 +312,7 @@ const timeGroups = computed((): TimeGroup[] => {
                 id: p.uuid,
                 url: displayUrl,
                 date: new Date(p.createdAt),
-                coverUrl: p.coverUrl,
+                coverUrl: p.coverUrl === null ? undefined : p.coverUrl, // 将 null 转换为 undefined
                 mediaType: p.mediaType,
                 naturalWidth: isVideo ? 200 : undefined,
                 naturalHeight: isVideo ? 200 : undefined
@@ -352,8 +407,18 @@ const initializeTimeline = async () => {
     isInitializing.value = true
     loadingError.value = ''
     
-    const stats = await getTimelineStatistics()
+    // 并行获取统计数据和自定义域名配置
+    const [stats, domainConfig] = await Promise.all([
+      getTimelineStatistics(),
+      getSystemConfig('storage', 'custom_domain').catch(() => null)
+    ])
+    
     statistics.value = stats
+    
+    // 更新自定义域名
+    if (domainConfig?.value) {
+      customDomain.value = domainConfig.value
+    }
     
     // 触发重新计算
     segmentsKey.value++

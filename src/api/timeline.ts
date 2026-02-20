@@ -21,13 +21,13 @@ interface BucketPhoto {
   objectKey: string;
   createdAt: string;      // ISO 8601 格式
   mediaType: string;
-  coverUrl: string;
+  coverUrl: string | null;  // 后端可能返回 null
 }
 
 interface TimelineBucket {
   year: number;
   month: number;
-  photos: BucketPhoto[];
+  media: BucketPhoto[];  // 后端返回的字段名是 media
   count: number;
 }
 
