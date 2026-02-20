@@ -282,7 +282,7 @@ const route = useRoute()
 
 const videoSources = ref<VideoSource[]>([])
 
-const posterUrl = ref<string>('https://albireo.shuumatu.com/videos/daa30485ae7b6bdf9a8edd07f72865874276efe80df429f39857328a449edef7/thumbnails/thumbnail.jpg')
+const posterUrl = ref<string>('')
 
 // 从路由参数中获取 uuid
 const uuid = Array.isArray(route.params.uuid) 
