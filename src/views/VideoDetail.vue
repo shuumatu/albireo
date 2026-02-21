@@ -1,5 +1,5 @@
 <template>
-  <div class="video-detail-page">
+  <div class="video-detail-page" :class="{ 'video-playing': videoPlaying }">
     <!-- 星空背景层 -->
     <div class="starfield">
       <div class="stars-layer stars-layer-1"></div>
@@ -110,7 +110,9 @@
                   v-if="videoSources.length > 0"
                   :video-sources="videoSources" 
                   :poster="posterUrl"
-                ></VideoPlayer>
+                  @playing="videoPlaying = true"
+                  @pause="videoPlaying = false"
+                />
                 
                 <!-- 加载中状态 -->
                 <div v-else class="loading-state">
@@ -284,6 +286,9 @@ const videoSources = ref<VideoSource[]>([])
 
 const posterUrl = ref<string>('')
 
+// 播放中状态：用于暂停页面背景动画，减轻主线程压力、缓解卡顿
+const videoPlaying = ref(false)
+
 // 从路由参数中获取 uuid
 const uuid = Array.isArray(route.params.uuid) 
   ? route.params.uuid[0] 
@@ -438,6 +443,19 @@ const themeOverrides = {
   padding: 40px 20px;
   position: relative;
   overflow: hidden;
+}
+
+/* 播放时暂停背景动画，减轻主线程与解码争抢，缓解卡顿 */
+.video-detail-page.video-playing .starfield,
+.video-detail-page.video-playing .starfield *,
+.video-detail-page.video-playing .astronomical-background,
+.video-detail-page.video-playing .astronomical-background *,
+.video-detail-page.video-playing .video-player-placeholder::before {
+  animation-play-state: paused !important;
+}
+
+.video-detail-page.video-playing .video-card.cosmic-card {
+  backdrop-filter: none;
 }
 
 /* 星空背景 */

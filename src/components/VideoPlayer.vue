@@ -32,6 +32,8 @@ const props = withDefaults(defineProps<Props>(), {
   poster: ''
 })
 
+const emit = defineEmits<{ playing: []; pause: [] }>()
+
 const sources = ref<VideoSource[]>(props.videoSources)
 const playbackRates = ref([0.5, 0.75, 1, 1.25, 1.5, 2])
 
@@ -356,44 +358,68 @@ const handleReady = () => {
     )
     
     // 重要：移除之前可能存在的监听器，然后添加新的
-    let inactivityTimer = null
-    
+    let inactivityTimer: ReturnType<typeof setTimeout> | null = null
+    let rafId: number | null = null
+
     const resetInactivityTimer = () => {
       if (inactivityTimer) {
         clearTimeout(inactivityTimer)
       }
       player.value.userActive(true)
-      
-      // 1秒后设置为不活动
       inactivityTimer = setTimeout(() => {
         player.value.userActive(false)
       }, 1000)
     }
-    
-    // 监听鼠标移动
-    playerEl.addEventListener('mousemove', resetInactivityTimer)
-    
-    // 鼠标离开立即隐藏
-    playerEl.addEventListener('mouseleave', () => {
+
+    // 节流 mousemove，避免播放时主线程被频繁调用导致卡顿
+    const throttledResetInactivity = () => {
+      if (rafId !== null) return
+      rafId = requestAnimationFrame(() => {
+        rafId = null
+        resetInactivityTimer()
+      })
+    }
+
+    const handleMouseLeave = () => {
       if (inactivityTimer) {
         clearTimeout(inactivityTimer)
+        inactivityTimer = null
+      }
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId)
+        rafId = null
       }
       player.value.userActive(false)
-    })
-    
-    // 鼠标进入显示控制栏
-    playerEl.addEventListener('mouseenter', () => {
+    }
+
+    const handleMouseEnter = () => {
       resetInactivityTimer()
-    })
-    
-    // 清理函数
+    }
+
+    playerEl.addEventListener('mousemove', throttledResetInactivity)
+    playerEl.addEventListener('mouseleave', handleMouseLeave)
+    playerEl.addEventListener('mouseenter', handleMouseEnter)
+
+    const onPlay = () => emit('playing')
+    const onPause = () => emit('pause')
+    player.value.on('play', onPlay)
+    player.value.on('pause', onPause)
+
+    // 清理函数（使用同一引用才能正确移除监听）
     const cleanup = () => {
       if (inactivityTimer) {
         clearTimeout(inactivityTimer)
+        inactivityTimer = null
       }
-      playerEl.removeEventListener('mousemove', resetInactivityTimer)
-      playerEl.removeEventListener('mouseleave', () => {})
-      playerEl.removeEventListener('mouseenter', () => {})
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId)
+        rafId = null
+      }
+      player.value.off('play', onPlay)
+      player.value.off('pause', onPause)
+      playerEl.removeEventListener('mousemove', throttledResetInactivity)
+      playerEl.removeEventListener('mouseleave', handleMouseLeave)
+      playerEl.removeEventListener('mouseenter', handleMouseEnter)
     }
     
     // 保存清理函数以便后续使用
@@ -406,10 +432,13 @@ const handleReady = () => {
 </script>
 
 <style>
+/* 独立合成层，减少与页面动画的相互重绘，缓解播放卡顿 */
 .video-player-container {
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
+  transform: translateZ(0);
+  contain: layout style;
 }
 
 /* 固定 16:9 视窗，竖屏视频两侧黑边（pillarbox），横屏正常或上下黑边（letterbox） */
