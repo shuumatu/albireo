@@ -7,6 +7,7 @@
       :controls="true"
       :playback-rates="playbackRates"
       :fluid="true"
+      :aspect-ratio="'16:9'"
       :picture-in-picture="true"
       class="video-js vjs-big-play-centered theme-green"
       @mounted="handleMounted"
@@ -409,6 +410,16 @@ const handleReady = () => {
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
+}
+
+/* 固定 16:9 视窗，竖屏视频两侧黑边（pillarbox），横屏正常或上下黑边（letterbox） */
+.video-player-container .video-js {
+  background: #000;
+}
+.video-player-container .video-js .vjs-tech,
+.video-player-container .video-js video {
+  object-fit: contain;
+  background: #000;
 }
 
 /* 绿色主题样式 */
