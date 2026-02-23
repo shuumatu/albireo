@@ -1,5 +1,5 @@
 <template>
-  <div style="height: 100vh; width: 100vw;">
+  <div style="height: 100%; width: 100%;">
     <l-map :zoom="5" :center="[35.6, 139.7]" style="height: 100%;">
       <!-- 图层切换器 -->
       <l-control-layers />
