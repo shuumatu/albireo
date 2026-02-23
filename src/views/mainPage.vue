@@ -10,16 +10,13 @@
     <!-- 背景图部分 -->
     <div class="bg-images">
       <img
-        v-for="(dot, index) in allBgs"
+        v-for="(dot, index) in dots"
         :key="dot.bg"
         :src="dot.bg"
         class="moving-bg"
-        :style="{
-          objectPosition: `${backgroundX}% center`,
-          opacity: dot.bg === currentBg ? 1 : 0,
-          zIndex: dot.bg === currentBg ? 1 : 0
-        }"
+        :class="{ 'is-active': dot.bg === currentBg }"
         loading="eager"
+        ref="bgImgRefs"
       />
     </div>
 
@@ -56,6 +53,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useMotions } from '@vueuse/motion'
+
+const bgImgRefs = ref<HTMLImageElement[]>([])
 
 const motions = useMotions()
 
@@ -152,19 +151,16 @@ const dots = ref([
 const defaultBg = new URL('../assets/bg4.jpg', import.meta.url).href
 const currentBg = ref(defaultBg)
 
-// 所有需要显示的背景图
-const allBgs = ref([{ bg: defaultBg }, ...dots.value])
-
 // 预加载所有图片
 onMounted(() => {
-  allBgs.value.forEach(dot => {
+  dots.value.forEach(dot => {
     const img = new Image()
     img.src = dot.bg
   })
 })
 
 const bgContainer = ref<HTMLElement | null>(null)
-const backgroundX = ref(50)
+let backgroundX = 50
 const showLeftArrow = ref(false)
 const showRightArrow = ref(false)
 
@@ -210,8 +206,12 @@ function startMoving() {
 
   const animate = () => {
     if (speed !== 0) {
-      backgroundX.value += speed
-      backgroundX.value = Math.max(0, Math.min(100, backgroundX.value))
+      backgroundX += speed
+      backgroundX = Math.max(0, Math.min(100, backgroundX))
+      const pos = `${backgroundX}% center`
+      bgImgRefs.value.forEach(img => {
+        img.style.objectPosition = pos
+      })
       animationFrameId = requestAnimationFrame(animate)
     } else {
       animationFrameId = null
@@ -249,11 +249,18 @@ onBeforeUnmount(() => {
   height: 100%;
   object-fit: cover;
   object-position: 50% center;
-  transition: opacity 0.6s ease, object-position 0.05s linear;
-  will-change: opacity, object-position;
+  transition: opacity 0.6s ease;
   pointer-events: none;
   top: 0;
   left: 0;
+  opacity: 0;
+  z-index: 0;
+}
+
+.moving-bg.is-active {
+  opacity: 1;
+  z-index: 1;
+  will-change: opacity;
 }
 
 .arrow {
