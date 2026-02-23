@@ -22,14 +22,14 @@
 
     <!-- 左右箭头 -->
     <img
-      v-if="showLeftArrow"
       class="arrow left-arrow"
+      :class="{ visible: showLeftArrow }"
       src="../assets/icon/KeyboardArrowLeftTwotone.svg"
       alt="←"
     />
     <img
-      v-if="showRightArrow"
       class="arrow right-arrow"
+      :class="{ visible: showRightArrow }"
       src="../assets/icon/KeyboardArrowRightTwotone.svg"
       alt="→"
     />
@@ -126,6 +126,9 @@ const hideDots = () => {
 // 处理圆点悬停
 const handleDotHover = (index: number) => {
   motions[`dot-${index}`].apply(variants.hang)
+  const pos = `${backgroundX}% center`
+  bgImgRefs.value.forEach(img => { img.style.objectPosition = pos })
+  activeIndex = index
   currentBg.value = dots.value[index].bg
 }
 
@@ -161,18 +164,22 @@ onMounted(() => {
 
 const bgContainer = ref<HTMLElement | null>(null)
 let backgroundX = 50
+let activeIndex = dots.value.findIndex(d => d.bg === defaultBg)
 const showLeftArrow = ref(false)
 const showRightArrow = ref(false)
 
 let speed = 0
 let animationFrameId: number | null = null
+let cachedRect: DOMRect | null = null
+
+function updateCachedRect() {
+  const el = bgContainer.value
+  if (el) cachedRect = el.getBoundingClientRect()
+}
 
 function handleMouseMove(e: MouseEvent) {
-  const el = bgContainer.value
-  if (!el) return
-  const { left, width } = el.getBoundingClientRect()
-  const mouseX = e.clientX - left
-  const ratio = mouseX / width
+  if (!cachedRect) return
+  const ratio = (e.clientX - cachedRect.left) / cachedRect.width
 
   if (ratio > 0.25 && ratio < 0.75) {
     speed = 0
@@ -182,8 +189,7 @@ function handleMouseMove(e: MouseEvent) {
   }
 
   const distanceFromCenter = ratio - 0.5
-  const amplified = Math.sign(distanceFromCenter) * Math.pow(Math.abs(distanceFromCenter), 5)
-  speed = amplified * 15
+  speed = Math.sign(distanceFromCenter) * Math.pow(Math.abs(distanceFromCenter), 5) * 15
 
   showLeftArrow.value = ratio <= 0.25
   showRightArrow.value = ratio >= 0.75
@@ -208,10 +214,8 @@ function startMoving() {
     if (speed !== 0) {
       backgroundX += speed
       backgroundX = Math.max(0, Math.min(100, backgroundX))
-      const pos = `${backgroundX}% center`
-      bgImgRefs.value.forEach(img => {
-        img.style.objectPosition = pos
-      })
+      const activeImg = bgImgRefs.value[activeIndex]
+      if (activeImg) activeImg.style.objectPosition = `${backgroundX}% center`
       animationFrameId = requestAnimationFrame(animate)
     } else {
       animationFrameId = null
@@ -221,10 +225,17 @@ function startMoving() {
   animate()
 }
 
+let resizeObserver: ResizeObserver | null = null
+
+onMounted(() => {
+  updateCachedRect()
+  resizeObserver = new ResizeObserver(updateCachedRect)
+  if (bgContainer.value) resizeObserver.observe(bgContainer.value)
+})
+
 onBeforeUnmount(() => {
-  if (animationFrameId !== null) {
-    cancelAnimationFrame(animationFrameId)
-  }
+  if (animationFrameId !== null) cancelAnimationFrame(animationFrameId)
+  resizeObserver?.disconnect()
 })
 </script>
 
@@ -249,18 +260,19 @@ onBeforeUnmount(() => {
   height: 100%;
   object-fit: cover;
   object-position: 50% center;
-  transition: opacity 0.6s ease;
-  pointer-events: none;
   top: 0;
   left: 0;
+  transition: opacity 0.6s ease;
+  pointer-events: none;
   opacity: 0;
   z-index: 0;
+  transform: translateZ(0);
+  contain: layout style;
 }
 
 .moving-bg.is-active {
   opacity: 1;
   z-index: 1;
-  will-change: opacity;
 }
 
 .arrow {
@@ -269,9 +281,14 @@ onBeforeUnmount(() => {
   top: 50%;
   transform: translateY(-50%);
   width: 100px;
-  opacity: 0.7;
+  opacity: 0;
   pointer-events: none;
   z-index: 2;
+  transition: opacity 0.2s ease;
+}
+
+.arrow.visible {
+  opacity: 0.7;
 }
 
 .left-arrow {
