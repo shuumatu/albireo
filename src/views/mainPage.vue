@@ -154,11 +154,10 @@ const dots = ref([
 const defaultBg = new URL('../assets/bg4.jpg', import.meta.url).href
 const currentBg = ref(defaultBg)
 
-// 预加载所有图片
+// 强制提前解码所有图片，避免首次显示时主线程阻塞
 onMounted(() => {
-  dots.value.forEach(dot => {
-    const img = new Image()
-    img.src = dot.bg
+  bgImgRefs.value.forEach(img => {
+    img.decode().catch(() => {})
   })
 })
 
