@@ -1,43 +1,20 @@
 <template>
-  <div style="height: 100%; width: 100%;">
-    <l-map :zoom="5" :center="[35.6, 139.7]" style="height: 100%;">
-      <!-- 图层切换器 -->
-      <l-control-layers />
+  <div class="map-wrapper">
+    <div ref="mapContainer" class="map-container"></div>
 
-      <!-- 普通地图 -->
-      <l-tile-layer
-        layer-type="base"
-        name="普通地图"
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-
-      <!-- 卫星图层（Esri） -->
-      <l-tile-layer
-        layer-type="base"
-        name="卫星图像"
-        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-        :attribution="'Tiles © Esri & the GIS community'"
-      />
-
-      <!-- 视频标记 -->
-      <l-marker
-        v-for="video in videos"
-        :key="video.id"
-        :lat-lng="[video.location.lat, video.location.lng]"
-        :icon="triangleIcon"
-        @click="selectVideo(video)"
-      >
-        <l-popup>
-          <div class="w-48">
-            <img :src="video.thumbnail" class="w-full rounded" />
-            <div class="text-sm mt-2 font-semibold">{{ video.title }}</div>
-            <n-button size="small" class="mt-2" @click="openVideo(video)">
-              播放
-            </n-button>
-          </div>
-        </l-popup>
-      </l-marker>
-    </l-map>
+    <!-- 图层切换器 -->
+    <div class="layer-switcher">
+      <label v-for="layer in baseLayers" :key="layer.id">
+        <input
+          type="radio"
+          name="baseLayer"
+          :value="layer.id"
+          v-model="activeLayer"
+          @change="switchLayer(layer.id)"
+        />
+        {{ layer.name }}
+      </label>
+    </div>
 
     <!-- 播放器模态框 -->
     <n-modal v-model:show="showPlayer" preset="card" style="width: 700px;">
@@ -51,34 +28,18 @@
 </template>
 
 <script setup>
-import {
-  LMap,
-  LTileLayer,
-  LMarker,
-  LPopup,
-  LControlLayers
-} from '@vue-leaflet/vue-leaflet'
-import 'leaflet/dist/leaflet.css'
+import { ref, onMounted, onUnmounted } from 'vue'
+import maplibregl from 'maplibre-gl'
+import 'maplibre-gl/dist/maplibre-gl.css'
 
-// 处理图标路径错误（Leaflet 的老问题）
-import L from 'leaflet'
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
-import markerIcon from 'leaflet/dist/images/marker-icon.png'
-import markerShadow from 'leaflet/dist/images/marker-shadow.png'
+const mapContainer = ref(null)
+let map = null
+const activeLayer = ref('osm')
 
-delete L.Icon.Default.prototype._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: markerIcon2x,
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow
-})
-const triangleIcon = L.divIcon({
-  className: 'custom-triangle-icon', // CSS 样式类名
-  iconSize: [12, 12], // 图标尺寸（可以调整）
-  iconAnchor: [6, 6] // 图标锚点（保持居中）
-})
-
-import { ref } from 'vue'
+const baseLayers = [
+  { id: 'osm', name: '普通地图' },
+  { id: 'satellite', name: '卫星图像' }
+]
 
 const videos = ref([
   {
@@ -99,9 +60,17 @@ const videos = ref([
 
 const selectedVideo = ref(null)
 const showPlayer = ref(false)
+const markers = []
 
-function selectVideo(video) {
-  selectedVideo.value = video
+function switchLayer(layerId) {
+  if (!map) return
+  baseLayers.forEach(layer => {
+    map.setLayoutProperty(
+      layer.id + '-layer',
+      'visibility',
+      layer.id === layerId ? 'visible' : 'none'
+    )
+  })
 }
 
 function openVideo(video) {
@@ -109,17 +78,155 @@ function openVideo(video) {
   showPlayer.value = true
 }
 
+function addMarkers() {
+  videos.value.forEach(video => {
+    const el = document.createElement('div')
+    el.className = 'custom-triangle-icon'
 
+    const marker = new maplibregl.Marker({ element: el })
+      .setLngLat([video.location.lng, video.location.lat])
+      .addTo(map)
 
+    el.addEventListener('click', () => {
+      selectedVideo.value = video
+    })
 
+    const popupContent = document.createElement('div')
+    popupContent.className = 'marker-popup-content'
+    popupContent.innerHTML = `
+      <img src="${video.thumbnail}" class="popup-thumbnail" />
+      <div class="popup-title">${video.title}</div>
+    `
+    const btn = document.createElement('button')
+    btn.className = 'popup-play-btn'
+    btn.textContent = '播放'
+    btn.addEventListener('click', () => openVideo(video))
+    popupContent.appendChild(btn)
+
+    const popup = new maplibregl.Popup({ offset: 10 })
+      .setDOMContent(popupContent)
+
+    marker.setPopup(popup)
+    markers.push(marker)
+  })
+}
+
+onMounted(() => {
+  map = new maplibregl.Map({
+    container: mapContainer.value,
+    style: {
+      version: 8,
+      sources: {
+        osm: {
+          type: 'raster',
+          tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+          tileSize: 256,
+          attribution: '&copy; OpenStreetMap contributors'
+        },
+        satellite: {
+          type: 'raster',
+          tiles: [
+            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+          ],
+          tileSize: 256,
+          attribution: 'Tiles &copy; Esri &amp; the GIS community'
+        }
+      },
+      layers: [
+        {
+          id: 'osm-layer',
+          type: 'raster',
+          source: 'osm',
+          layout: { visibility: 'visible' }
+        },
+        {
+          id: 'satellite-layer',
+          type: 'raster',
+          source: 'satellite',
+          layout: { visibility: 'none' }
+        }
+      ]
+    },
+    center: [139.7, 35.6],
+    zoom: 5
+  })
+
+  map.on('load', () => {
+    addMarkers()
+  })
+})
+
+onUnmounted(() => {
+  markers.forEach(m => m.remove())
+  if (map) {
+    map.remove()
+    map = null
+  }
+})
 </script>
+
 <style>
+.map-wrapper {
+  height: 100%;
+  width: 100%;
+  position: relative;
+}
+
+.map-container {
+  height: 100%;
+  width: 100%;
+}
+
+.layer-switcher {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: white;
+  padding: 10px;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+
 .custom-triangle-icon {
   width: 0;
   height: 0;
   border-left: 6px solid transparent;
   border-right: 6px solid transparent;
-  border-top: 12px solid rgba(255, 255, 255, 0.5); /* 半透明黑色三角 */
+  border-top: 12px solid rgba(255, 255, 255, 0.5);
+  cursor: pointer;
 }
 
+.marker-popup-content {
+  width: 12rem;
+}
+
+.popup-thumbnail {
+  width: 100%;
+  border-radius: 4px;
+}
+
+.popup-title {
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+  font-weight: 600;
+}
+
+.popup-play-btn {
+  margin-top: 0.5rem;
+  padding: 2px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.popup-play-btn:hover {
+  background: #f0f0f0;
+}
 </style>
