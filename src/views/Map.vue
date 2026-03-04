@@ -299,6 +299,8 @@ async function loadMoreClusterMedia() {
 function navigateToDetail(point: MapPointVO) {
   if (point.mediaType === 'video') {
     router.push({ name: 'VideoPlayer', params: { uuid: point.uuid } })
+  } else {
+    router.push({ name: 'ImageDetail', params: { uuid: point.uuid } })
   }
 }
 

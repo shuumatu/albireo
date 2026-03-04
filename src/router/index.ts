@@ -5,12 +5,18 @@ import ResourceGallery from '../views/ResourceGallery.vue'
 import VideoDetail from '../views/VideoDetail.vue'
 import VideoPlayer from '../components/VideoPlayer.vue'
 import TimeLine from '../views/TimeLine.vue'
+import ImageDetail from '../views/ImageDetail.vue'
 
 const routes = [
     {
         path: '/video/:uuid',
         name: 'VideoPlayer',
         component:VideoDetail
+    },
+    {
+        path: '/image/:uuid',
+        name: 'ImageDetail',
+        component:ImageDetail
     },
     {
         path: '/',
