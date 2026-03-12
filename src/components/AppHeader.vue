@@ -10,47 +10,75 @@
       </router-link>
     </div>
 
-    <!-- 右侧菜单 -->
-    <div class="menu-wrapper">
-      <n-menu
-        mode="horizontal"
-        :options="menuOptions"
-        :value="activeKey"
-        @update:value="handleMenuSelect"
-        class="menu"
-      />
+    <!-- 右侧区域 -->
+    <div class="right-section">
+      <div class="menu-wrapper">
+        <n-menu
+          mode="horizontal"
+          :options="menuOptions"
+          :value="activeKey"
+          @update:value="handleMenuSelect"
+          class="menu"
+        />
+      </div>
+
+      <n-dropdown :options="userMenuOptions" @select="handleUserMenuSelect">
+        <n-button text class="user-btn">
+          <n-avatar :size="28" round class="user-avatar-small">
+            {{ username?.charAt(0)?.toUpperCase() || 'U' }}
+          </n-avatar>
+          <span class="username-text">{{ username || '用户' }}</span>
+        </n-button>
+      </n-dropdown>
     </div>
   </n-layout-header>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 const route = useRoute()
 const router = useRouter()
 const activeKey = ref(route.path)
 
-// 根据当前路径更新激活菜单项
 watch(route, () => {
   activeKey.value = route.path
 })
 
-// 菜单选项
+const username = computed(() => localStorage.getItem('username') || '')
+
 const menuOptions = [
   {
     label: '地图',
     key: '/map'
   },
   {
-    label:'首页',
+    label: '首页',
     key: '/gallery'
   }
 ]
 
-// 点击菜单时导航
+const userMenuOptions = [
+  { label: '个人中心', key: 'profile' },
+  { type: 'divider', key: 'd1' },
+  { label: '退出登录', key: 'logout' }
+]
+
 function handleMenuSelect(key) {
   router.push(key)
+}
+
+function handleUserMenuSelect(key) {
+  if (key === 'profile') {
+    router.push('/profile')
+  } else if (key === 'logout') {
+    localStorage.removeItem('token')
+    localStorage.removeItem('userId')
+    localStorage.removeItem('username')
+    localStorage.removeItem('role')
+    router.push('/login')
+  }
 }
 </script>
 
@@ -71,7 +99,12 @@ function handleMenuSelect(key) {
   height: 40px;
 }
 
-/* 菜单容器 */
+.right-section {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
 .menu-wrapper {
   display: flex;
   align-items: center;
@@ -100,5 +133,30 @@ function handleMenuSelect(key) {
   height: 20px;
   width: 1px;
   background-color: white;
+}
+
+.user-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: white !important;
+  cursor: pointer;
+}
+
+.user-avatar-small {
+  background: linear-gradient(135deg, #302b63, #24243e);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.username-text {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.85);
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

@@ -40,7 +40,7 @@ export function getMapAggregation(params: {
   maxLat: number;
   zoom: number;
 }): Promise<MapAggregationVO> {
-  return request.get("/map/aggregation", { params });
+  return request.get("/api/metadata/map/aggregation", { params });
 }
 
 export function getClusterMedia(
@@ -48,7 +48,7 @@ export function getClusterMedia(
   page = 1,
   pageSize = 20
 ): Promise<ClusterMediaPage> {
-  return request.get(`/map/cluster/${encodeURIComponent(clusterId)}/media`, {
+  return request.get(`/api/metadata/map/cluster/${encodeURIComponent(clusterId)}/media`, {
     params: { page, pageSize },
   });
 }

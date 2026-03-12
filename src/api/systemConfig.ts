@@ -20,7 +20,7 @@ interface SystemConfigVO {
  * @param key 配置键名
  */
 export function getSystemConfig(category: string, key: string): Promise<SystemConfigVO> {
-  return request.get(`/system-config/${category}/${key}`);
+  return request.get(`/api/metadata/system-config/${category}/${key}`);
 }
 
 /**
@@ -28,7 +28,7 @@ export function getSystemConfig(category: string, key: string): Promise<SystemCo
  * @param category 配置分类（如：storage, ai_api, system）
  */
 export function getSystemConfigsByCategory(category: string): Promise<SystemConfigVO[]> {
-  return request.get(`/system-config/${category}`);
+  return request.get(`/api/metadata/system-config/${category}`);
 }
 
 // 导出类型定义供其他模块使用

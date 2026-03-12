@@ -3,48 +3,69 @@ import MainPage from '../views/mainPage.vue'
 import Map from '../views/Map.vue'
 import ResourceGallery from '../views/ResourceGallery.vue'
 import VideoDetail from '../views/VideoDetail.vue'
-import VideoPlayer from '../components/VideoPlayer.vue'
 import TimeLine from '../views/TimeLine.vue'
 import ImageDetail from '../views/ImageDetail.vue'
+import LoginPage from '../views/LoginPage.vue'
+import UserProfile from '../views/UserProfile.vue'
 
 const routes = [
     {
+        path: '/login',
+        name: 'Login',
+        component: LoginPage,
+        meta: { fullScreen: true }
+    },
+    {
+        path: '/profile',
+        name: 'Profile',
+        component: UserProfile
+    },
+    {
         path: '/video/:uuid',
         name: 'VideoPlayer',
-        component:VideoDetail
+        component: VideoDetail
     },
     {
         path: '/image/:uuid',
         name: 'ImageDetail',
-        component:ImageDetail
+        component: ImageDetail
     },
     {
         path: '/',
         name: 'Home',
-        component:MainPage
+        component: MainPage
     },
     {
-        path:'/map',
-        name:'Map',
-        component:Map
+        path: '/map',
+        name: 'Map',
+        component: Map
     },
     {
         path: '/gallery',
         name: 'Gallery',
-        component:ResourceGallery
+        component: ResourceGallery
     },
     {
-        path:'/timneline',
-        name:'Timeline',
-        component:TimeLine
+        path: '/timneline',
+        name: 'Timeline',
+        component: TimeLine
     }
-
-
 ]
 
 const router = createRouter({
-  history: createWebHistory(), // 使用 HTML5 模式
+  history: createWebHistory(),
   routes
+})
+
+router.beforeEach((to, _from, next) => {
+  const token = localStorage.getItem('token')
+  if (to.name !== 'Login' && !token) {
+    next({ name: 'Login', query: { redirect: to.fullPath } })
+  } else if (to.name === 'Login' && token) {
+    next({ path: '/' })
+  } else {
+    next()
+  }
 })
 
 export default router

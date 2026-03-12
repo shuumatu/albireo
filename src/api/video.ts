@@ -12,10 +12,10 @@ interface videoData {
 
 
 export function getVideoUrl(uuid:string) {
-  return request.get(`/video/get-url/${uuid}`);
+  return request.get(`/api/metadata/video/get-url/${uuid}`);
 }
 
 
 export function getVideoInfo(uuid:string):Promise<videoData> {
-  return request.get(`/video/info/${uuid}`);
+  return request.get(`/api/metadata/video/info/${uuid}`);
 }

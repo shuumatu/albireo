@@ -36,7 +36,7 @@ interface TimelineBucket {
  * 用于初始化页面，获取最早和最晚的资源时间，以及每个月的数据分布
  */
 export function getTimelineStatistics(): Promise<TimelineStatistics> {
-  return request.get('/timeline/statistics');
+  return request.get('/api/metadata/timeline/statistics');
 }
 
 /**
@@ -45,7 +45,7 @@ export function getTimelineStatistics(): Promise<TimelineStatistics> {
  * @param month 月份，1-12
  */
 export function getTimelineBucket(year: number, month: number): Promise<TimelineBucket> {
-  return request.get(`/timeline/bucket`, {
+  return request.get(`/api/metadata/timeline/bucket`, {
     params: { year, month }
   });
 }

@@ -1,21 +1,26 @@
 <template>
-  <n-layout class="app-layout">
-    <n-layout-header bordered class="app-header">
-      <AppHeader />
-    </n-layout-header>
-    <n-layout-content class="app-content">
-      <div class="content-wrapper">
-        <router-view />
-      </div>
-    </n-layout-content>
-  </n-layout>
+  <template v-if="route.meta.fullScreen">
+    <router-view />
+  </template>
+  <n-message-provider v-else>
+    <n-layout class="app-layout">
+      <n-layout-header bordered class="app-header">
+        <AppHeader />
+      </n-layout-header>
+      <n-layout-content class="app-content">
+        <div class="content-wrapper">
+          <router-view />
+        </div>
+      </n-layout-content>
+    </n-layout>
+  </n-message-provider>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import AppHeader from './components/AppHeader.vue';
+import { useRoute } from 'vue-router'
+import AppHeader from './components/AppHeader.vue'
 
-const href = ref('http://localhost:5173/video/7583f915-6ef1-474b-a3e4-b427b8d97068')
+const route = useRoute()
 </script>
 
 <style>

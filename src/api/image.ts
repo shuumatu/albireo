@@ -13,5 +13,5 @@ export interface ImageInfoVO {
 }
 
 export function getImageInfo(uuid: string): Promise<ImageInfoVO> {
-  return request.get(`/image/info/${uuid}`)
+  return request.get(`/api/metadata/image/info/${uuid}`)
 }
