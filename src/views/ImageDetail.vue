@@ -117,9 +117,9 @@
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               {{ formatDate(imageData.createdAt) }}
             </span>
-            <span v-if="imageData.fileCreatedAt" class="tag tag-camera">
+            <span v-if="imageData.shotAt" class="tag tag-camera">
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-              拍摄于 {{ formatDate(imageData.fileCreatedAt!) }}
+              拍摄于 {{ formatDate(imageData.shotAt!) }}
             </span>
           </div>
 
@@ -137,9 +137,9 @@
             <span class="meta-label">状态</span>
             <span class="meta-value" :class="'mv-' + imageData.status">{{ statusText }}</span>
           </div>
-          <div v-if="imageData.fileCreatedAt" class="meta-cell">
+          <div v-if="imageData.shotAt" class="meta-cell">
             <span class="meta-label">拍摄时间</span>
-            <span class="meta-value">{{ formatDateTime(imageData.fileCreatedAt!) }}</span>
+            <span class="meta-value">{{ formatDateTime(imageData.shotAt!) }}</span>
           </div>
           <div class="meta-cell">
             <span class="meta-label">入库时间</span>

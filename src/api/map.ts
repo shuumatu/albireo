@@ -21,11 +21,22 @@ export interface MapClusterVO {
   representativeThumbnailUrl: string | null;
 }
 
+export interface TimeHistogramBucket {
+  index: number;
+  start: string;
+  count: number;
+}
+
 export interface MapAggregationVO {
   clusters: MapClusterVO[];
   points: MapPointVO[];
   totalVideos: number;
   totalImages: number;
+  minTime?: string;
+  maxTime?: string;
+  bucketCount?: number;
+  bucketWidthSeconds?: number;
+  timeHistogram?: TimeHistogramBucket[];
 }
 
 export interface ClusterMediaPage {
@@ -39,6 +50,8 @@ export function getMapAggregation(params: {
   maxLng: number;
   maxLat: number;
   zoom: number;
+  startDate?: string;
+  endDate?: string;
 }): Promise<MapAggregationVO> {
   return request.get("/api/metadata/map/aggregation", { params });
 }

@@ -158,6 +158,23 @@
                 >
                   <n-space :size="12" align="center">
                     <n-tag 
+                      v-if="videoData.shotAt"
+                      :bordered="false" 
+                      type="warning"
+                      size="medium"
+                      class="date-tag cosmic-tag"
+                    >
+                      <template #icon>
+                        <n-icon>
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                            <path fill="currentColor" d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+                          </svg>
+                        </n-icon>
+                      </template>
+                      拍摄于 {{ videoData.shotAt }}
+                    </n-tag>
+
+                    <n-tag 
                       :bordered="false" 
                       type="warning"
                       size="medium"
@@ -170,7 +187,7 @@
                           </svg>
                         </n-icon>
                       </template>
-                      {{ videoData.createdAt }}
+                      上传于 {{ videoData.createdAt }}
                     </n-tag>
 
                     <n-space :size="8">
@@ -301,6 +318,7 @@ const videoData = ref({
   title: '加载中...',
   description: '正在获取视频信息...',
   createdAt: '',
+  shotAt: '',
   tags: [] as string[],
   views: 0
 })
@@ -317,6 +335,9 @@ async function fetchVideoInfo() {
     videoData.value.description = videoResponse.description
     // 使用 dayjs 格式化日期
     videoData.value.createdAt = dayjs(videoResponse.createdAt).format('YYYY-MM-DD HH:mm')
+    if (videoResponse.shotAt) {
+      videoData.value.shotAt = dayjs(videoResponse.shotAt).format('YYYY-MM-DD HH:mm')
+    }
     videoData.value.tags = videoResponse.tags.map(tag => tag.name) // 将对象数组转换为字符串数组
     
     // 获取 objectKey（优先使用 objectKey，如果没有则使用 url）

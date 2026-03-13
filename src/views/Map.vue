@@ -16,10 +16,41 @@
       </label>
     </div>
 
-    <!-- 统计信息 -->
-    <div v-if="totalVideos > 0 || totalImages > 0" class="stats-badge">
-      <span v-if="totalVideos > 0">🎬 {{ totalVideos }}</span>
-      <span v-if="totalImages > 0">🖼 {{ totalImages }}</span>
+    <!-- 底部时间轴 -->
+    <div class="time-axis">
+      <div class="timeline-panel">
+        <div class="timeline-header">
+          <span class="timeline-selected-range">
+            {{ formatDate(selectedStartTime) }} — {{ formatDate(selectedEndTime) }}
+          </span>
+          <span class="timeline-stats">
+            <span v-if="totalVideos > 0">🎬 {{ totalVideos }}</span>
+            <span v-if="totalImages > 0">🖼 {{ totalImages }}</span>
+          </span>
+        </div>
+        <div class="timeline-track" ref="trackRef">
+          <canvas ref="densityCanvas" class="density-canvas"></canvas>
+          <div
+            class="timeline-selection"
+            :style="selectionStyle"
+            @pointerdown="onSelectionPointerDown"
+          ></div>
+          <div
+            class="timeline-handle"
+            :style="startHandleStyle"
+            @pointerdown.stop="onStartPointerDown"
+          ></div>
+          <div
+            class="timeline-handle"
+            :style="endHandleStyle"
+            @pointerdown.stop="onEndPointerDown"
+          ></div>
+        </div>
+        <div class="timeline-footer">
+          <span class="timeline-bound">{{ formatDate(globalMinTime) }}</span>
+          <span class="timeline-bound">{{ formatDate(globalMaxTime) }}</span>
+        </div>
+      </div>
     </div>
 
     <!-- 簇内媒体列表弹窗 -->
@@ -46,7 +77,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
@@ -74,9 +105,176 @@ const clusterMediaTotal = ref(0)
 let currentClusterId = ''
 let currentClusterPage = 1
 
+const trackRef = ref<HTMLDivElement | null>(null)
+const densityCanvas = ref<HTMLCanvasElement | null>(null)
+const globalMinTime = ref(new Date('2020-01-01').getTime())
+const globalMaxTime = ref(Date.now())
+const rangeStart = ref(0)
+const rangeEnd = ref(1)
+const densityBuckets = ref<number[]>([])
+const MIN_RANGE = 0.01
+
+const selectedStartTime = computed(() =>
+  globalMinTime.value + rangeStart.value * (globalMaxTime.value - globalMinTime.value)
+)
+const selectedEndTime = computed(() =>
+  globalMinTime.value + rangeEnd.value * (globalMaxTime.value - globalMinTime.value)
+)
+const selectionStyle = computed(() => ({
+  left: `${rangeStart.value * 100}%`,
+  width: `${(rangeEnd.value - rangeStart.value) * 100}%`,
+}))
+const startHandleStyle = computed(() => ({
+  left: `${rangeStart.value * 100}%`,
+}))
+const endHandleStyle = computed(() => ({
+  left: `${rangeEnd.value * 100}%`,
+}))
+
 const markers: maplibregl.Marker[] = []
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let fetchSeq = 0
+
+// --- 时间工具 ---
+
+function formatDate(ts: number): string {
+  const d = new Date(ts)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+function getTimeParams(): { startDate?: string; endDate?: string } {
+  if (rangeStart.value <= 0 && rangeEnd.value >= 1) return {}
+  const fmt = (ts: number) => new Date(ts).toISOString().slice(0, 10)
+  return {
+    startDate: fmt(selectedStartTime.value),
+    endDate: fmt(selectedEndTime.value),
+  }
+}
+
+// --- 时间轴交互 ---
+
+function clamp(v: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, v))
+}
+
+let dragMode: 'start' | 'end' | 'range' | null = null
+let dragOriginX = 0
+let dragOriginStart = 0
+let dragOriginEnd = 0
+
+function getTrackWidth() {
+  return trackRef.value?.getBoundingClientRect().width ?? 1
+}
+
+function onStartPointerDown(e: PointerEvent) {
+  e.preventDefault()
+  dragMode = 'start'
+  dragOriginX = e.clientX
+  dragOriginStart = rangeStart.value
+  document.addEventListener('pointermove', onPointerMove)
+  document.addEventListener('pointerup', onPointerUp)
+}
+
+function onEndPointerDown(e: PointerEvent) {
+  e.preventDefault()
+  dragMode = 'end'
+  dragOriginX = e.clientX
+  dragOriginEnd = rangeEnd.value
+  document.addEventListener('pointermove', onPointerMove)
+  document.addEventListener('pointerup', onPointerUp)
+}
+
+function onSelectionPointerDown(e: PointerEvent) {
+  e.preventDefault()
+  dragMode = 'range'
+  dragOriginX = e.clientX
+  dragOriginStart = rangeStart.value
+  dragOriginEnd = rangeEnd.value
+  document.addEventListener('pointermove', onPointerMove)
+  document.addEventListener('pointerup', onPointerUp)
+}
+
+function onPointerMove(e: PointerEvent) {
+  if (!dragMode) return
+  const delta = (e.clientX - dragOriginX) / getTrackWidth()
+
+  if (dragMode === 'start') {
+    rangeStart.value = clamp(dragOriginStart + delta, 0, rangeEnd.value - MIN_RANGE)
+  } else if (dragMode === 'end') {
+    rangeEnd.value = clamp(dragOriginEnd + delta, rangeStart.value + MIN_RANGE, 1)
+  } else {
+    const span = dragOriginEnd - dragOriginStart
+    let newStart = dragOriginStart + delta
+    let newEnd = dragOriginEnd + delta
+    if (newStart < 0) { newStart = 0; newEnd = span }
+    if (newEnd > 1) { newEnd = 1; newStart = 1 - span }
+    rangeStart.value = newStart
+    rangeEnd.value = newEnd
+  }
+}
+
+function onPointerUp() {
+  dragMode = null
+  document.removeEventListener('pointermove', onPointerMove)
+  document.removeEventListener('pointerup', onPointerUp)
+  debouncedFetch()
+}
+
+// --- 密度绘制 ---
+
+function drawDensity() {
+  const canvas = densityCanvas.value
+  const track = trackRef.value
+  if (!canvas || !track) return
+
+  const rect = track.getBoundingClientRect()
+  const dpr = window.devicePixelRatio || 1
+  canvas.width = Math.round(rect.width * dpr)
+  canvas.height = Math.round(rect.height * dpr)
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  ctx.clearRect(0, 0, rect.width, rect.height)
+
+  const buckets = densityBuckets.value
+  if (buckets.length === 0) return
+  const maxCount = Math.max(...buckets)
+  if (maxCount === 0) return
+
+  const barW = rect.width / buckets.length
+  for (let i = 0; i < buckets.length; i++) {
+    if (buckets[i] === 0) continue
+    const t = buckets[i] / maxCount
+    ctx.fillStyle = `rgba(34,197,94,${(0.15 + t * 0.7).toFixed(3)})`
+    ctx.fillRect(i * barW, 0, Math.ceil(barW), rect.height)
+  }
+}
+
+function updateTimelineFromAggregation(data: {
+  minTime?: string;
+  maxTime?: string;
+  bucketCount?: number;
+  bucketWidthSeconds?: number;
+  timeHistogram?: { index: number; start: string; count: number }[];
+}) {
+  if (data.minTime && data.maxTime) {
+    globalMinTime.value = new Date(data.minTime).getTime()
+    globalMaxTime.value = new Date(data.maxTime).getTime()
+  }
+  if (data.timeHistogram) {
+    const count = data.bucketCount ?? data.timeHistogram.length
+    const bars = new Array<number>(count).fill(0)
+    data.timeHistogram.forEach(({ index, count }) => {
+      bars[index] = count
+    })
+    densityBuckets.value = bars
+  }
+  nextTick(drawDensity)
+}
+
+let resizeObserver: ResizeObserver | null = null
 
 // --- 经度归一化 ---
 
@@ -241,13 +439,14 @@ async function fetchAggregation() {
   const zoom = Math.round(map.getZoom())
 
   try {
-    const data = await getMapAggregation({ ...bounds, zoom })
+    const data = await getMapAggregation({ ...bounds, zoom, ...getTimeParams() })
 
     if (seq !== fetchSeq) return
 
     clearMarkers()
     totalVideos.value = data.totalVideos
     totalImages.value = data.totalImages
+    updateTimelineFromAggregation(data)
 
     if (data.clusters.length > 0) {
       renderClusters(data.clusters)
@@ -356,6 +555,9 @@ onMounted(async () => {
   })
 
   map.on('moveend', debouncedFetch)
+
+  resizeObserver = new ResizeObserver(drawDensity)
+  if (trackRef.value) resizeObserver.observe(trackRef.value)
 })
 
 onUnmounted(() => {
@@ -365,6 +567,12 @@ onUnmounted(() => {
     map.remove()
     map = null
   }
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
+  document.removeEventListener('pointermove', onPointerMove)
+  document.removeEventListener('pointerup', onPointerUp)
 })
 </script>
 
@@ -395,20 +603,132 @@ onUnmounted(() => {
   font-size: 14px;
 }
 
-.stats-badge {
+.time-axis {
   position: absolute;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.7);
-  color: #fff;
-  padding: 6px 16px;
-  border-radius: 20px;
-  font-size: 13px;
+  bottom: 0;
+  left: 0;
+  right: 0;
   z-index: 1;
+  padding: 12px 20px;
+  pointer-events: none;
+}
+
+.timeline-panel {
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 14px;
+  padding: 10px 16px 8px;
+  pointer-events: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+}
+
+.timeline-header {
   display: flex;
-  gap: 12px;
-  backdrop-filter: blur(4px);
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.timeline-selected-range {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+  letter-spacing: 0.02em;
+}
+
+.timeline-stats {
+  display: flex;
+  gap: 10px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.75);
+  user-select: none;
+}
+
+.timeline-track {
+  position: relative;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  overflow: hidden;
+  user-select: none;
+  touch-action: none;
+}
+
+.density-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.timeline-selection {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.10);
+  cursor: grab;
+  z-index: 1;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  transition: background 0.1s;
+}
+
+.timeline-selection:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.timeline-selection:active {
+  cursor: grabbing;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.timeline-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 16px;
+  transform: translateX(-50%);
+  cursor: col-resize;
+  z-index: 2;
+}
+
+.timeline-handle::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 1px;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+  transition: width 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.timeline-handle:hover::before,
+.timeline-handle:active::before {
+  width: 3px;
+  background: #fff;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.3), 0 0 4px rgba(0, 0, 0, 0.5);
+}
+
+.timeline-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.timeline-bound {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
 }
 
 /* ---- 标记锚点（MapLibre 直接控制此元素的 transform，不要在这里加 transition/transform） ---- */

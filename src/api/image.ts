@@ -8,7 +8,7 @@ export interface ImageInfoVO {
   description: string | null
   type: string | null
   status: string
-  fileCreatedAt: string | null
+  shotAt: string | null
   createdAt: string
 }
 
