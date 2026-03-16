@@ -84,6 +84,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { getMapAggregation, getClusterMedia } from '../api/map'
 import type { MapPointVO, MapClusterVO } from '../api/map'
 import { getSystemConfig } from '../api/systemConfig'
+import { gcj02ToWgs84 } from '../utils/coordTransform'
 
 const router = useRouter()
 const mapContainer = ref<HTMLDivElement | null>(null)
@@ -406,9 +407,10 @@ function renderClusters(clusters: MapClusterVO[]) {
   const centerLng = map!.getCenter().lng
   clusters.forEach(cluster => {
     const el = createClusterMarkerElement(cluster)
-    const lng = nearestLng(cluster.longitude, centerLng)
+    const [tLng, tLat] = gcj02ToWgs84(cluster.longitude, cluster.latitude)
+    const lng = nearestLng(tLng, centerLng)
     const marker = new maplibregl.Marker({ element: el })
-      .setLngLat([lng, cluster.latitude])
+      .setLngLat([lng, tLat])
       .addTo(map!)
 
     el.addEventListener('click', () => openClusterMedia(cluster.clusterId))
@@ -420,9 +422,10 @@ function renderPoints(points: MapPointVO[]) {
   const centerLng = map!.getCenter().lng
   points.forEach(point => {
     const el = createPointMarkerElement(point)
-    const lng = nearestLng(point.longitude, centerLng)
+    const [tLng, tLat] = gcj02ToWgs84(point.longitude, point.latitude)
+    const lng = nearestLng(tLng, centerLng)
     const marker = new maplibregl.Marker({ element: el })
-      .setLngLat([lng, point.latitude])
+      .setLngLat([lng, tLat])
       .addTo(map!)
 
     el.addEventListener('click', () => navigateToDetail(point))
@@ -496,11 +499,12 @@ async function loadMoreClusterMedia() {
 // --- 导航 ---
 
 function navigateToDetail(point: MapPointVO) {
-  if (point.mediaType === 'video') {
-    router.push({ name: 'VideoPlayer', params: { uuid: point.uuid } })
-  } else {
-    router.push({ name: 'ImageDetail', params: { uuid: point.uuid } })
-  }
+  const routeLocation = point.mediaType === 'video'
+    ? { name: 'VideoPlayer', params: { uuid: point.uuid } }
+    : { name: 'ImageDetail', params: { uuid: point.uuid } }
+
+  const resolved = router.resolve(routeLocation)
+  window.open(resolved.href, '_blank', 'noopener')
 }
 
 // --- 生命周期 ---

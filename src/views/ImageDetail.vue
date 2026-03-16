@@ -31,7 +31,7 @@
         </svg>
         <span class="state-title">未找到图片</span>
         <span class="state-text">该图片可能不存在或已被删除</span>
-        <button class="btn-ghost" @click="$router.back()">
+        <button class="btn-ghost" @click="goBack">
           <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
           返回
         </button>
@@ -47,7 +47,7 @@
         :transition="{ duration: 0.35 }"
         class="nav"
       >
-        <button class="btn-ghost" @click="$router.back()">
+        <button class="btn-ghost" @click="goBack">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
           返回
         </button>
@@ -179,7 +179,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { motion } from 'motion-v'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { getImageInfo } from '../api/image'
 import CommentSection from '../components/CommentSection.vue'
 import type { ImageInfoVO } from '../api/image'
@@ -187,7 +187,16 @@ import { getSystemConfig } from '../api/systemConfig'
 import dayjs from 'dayjs'
 
 const route = useRoute()
+const router = useRouter()
 const imgEl = ref<HTMLImageElement | null>(null)
+
+function goBack() {
+  if (window.history.length > 1) {
+    router.back()
+  } else {
+    window.close()
+  }
+}
 
 const imageData = ref<ImageInfoVO | null>(null)
 const loading = ref(true)
