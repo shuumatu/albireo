@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { getTimelineStatistics, getTimelineBucket, type TimelineStatistics, type TimelineBucket, type BucketPhoto, type MonthlyCount } from '../api/timeline'
 import { getSystemConfig } from '../api/systemConfig'
 
@@ -65,6 +66,15 @@ const loadedBuckets = ref<Map<string, TimelineBucket>>(new Map())
 const isInitializing = ref(true)
 const loadingError = ref<string>('')
 const customDomain = ref<string>('albireo.shuumatu.com') // 默认域名
+const router = useRouter()
+
+const openMediaDetail = (photo: Photo) => {
+  const isVideo = photo.mediaType && (photo.mediaType.startsWith('video/') || photo.mediaType === 'video')
+  const route = isVideo
+    ? router.resolve({ name: 'VideoPlayer', params: { uuid: photo.id } })
+    : router.resolve({ name: 'ImageDetail', params: { uuid: photo.id } })
+  window.open(route.href, '_blank')
+}
 
 // 常量
 const PADDING_TOP = 32
@@ -746,6 +756,7 @@ watch(windowHeight, () => {
                 width: calculatePhotoWidth(photo) + 'px', 
                 height: '200px'
               }"
+              @click="openMediaDetail(photo)"
             >
               <img 
                 :src="photo.url" 

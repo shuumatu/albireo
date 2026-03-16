@@ -546,7 +546,7 @@ onMounted(async () => {
         }
       ]
     },
-    center: [139.7, 35.6],
+    center: [116.4074, 39.9042],
     zoom: 5
   })
 
@@ -554,7 +554,7 @@ onMounted(async () => {
     fetchAggregation()
   })
 
-  map.on('moveend', debouncedFetch)
+  map.on('moveend', fetchAggregation)
 
   resizeObserver = new ResizeObserver(drawDensity)
   if (trackRef.value) resizeObserver.observe(trackRef.value)

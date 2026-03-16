@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import MainPage from '../views/mainPage.vue'
 import Map from '../views/Map.vue'
-import ResourceGallery from '../views/ResourceGallery.vue'
 import VideoDetail from '../views/VideoDetail.vue'
 import TimeLine from '../views/TimeLine.vue'
 import ImageDetail from '../views/ImageDetail.vue'
@@ -41,12 +40,7 @@ const routes = [
         component: Map
     },
     {
-        path: '/gallery',
-        name: 'Gallery',
-        component: ResourceGallery
-    },
-    {
-        path: '/timneline',
+        path: '/timeline',
         name: 'Timeline',
         component: TimeLine
     }

@@ -269,6 +269,20 @@
               </n-space>
             </n-card>
           </motion.div>
+
+          <!-- 评论区域 -->
+          <motion.div
+            :initial="{ opacity: 0, y: 20 }"
+            :animate="{ opacity: 1, y: 0 }"
+            :transition="{ duration: 0.6, delay: 1.1 }"
+          >
+            <n-card
+              :bordered="false"
+              class="info-card cosmic-card"
+            >
+              <CommentSection target-type="video" :target-id="uuid as string" />
+            </n-card>
+          </motion.div>
         </n-space>
       </motion.div>
     </n-config-provider>
@@ -290,6 +304,7 @@ import {
   NDivider
 } from 'naive-ui'
 import VideoPlayer from '../components/VideoPlayer.vue'
+import CommentSection from '../components/CommentSection.vue'
 import type { VideoSource } from '../types/video'
 import { useRoute } from 'vue-router'
 import { getVideoInfo } from '../api/video'

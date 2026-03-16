@@ -54,8 +54,8 @@ const menuOptions = [
     key: '/map'
   },
   {
-    label: '首页',
-    key: '/gallery'
+    label: '时间线',
+    key: '/timeline'
   }
 ]
 

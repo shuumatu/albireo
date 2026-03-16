@@ -146,6 +146,11 @@
             <span class="meta-value">{{ formatDateTime(imageData.createdAt) }}</span>
           </div>
         </div>
+
+        <!-- 评论区域 -->
+        <div class="comment-wrapper">
+          <CommentSection target-type="image" :target-id="uuid as string" />
+        </div>
       </motion.div>
     </template>
 
@@ -176,6 +181,7 @@ import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { motion } from 'motion-v'
 import { useRoute } from 'vue-router'
 import { getImageInfo } from '../api/image'
+import CommentSection from '../components/CommentSection.vue'
 import type { ImageInfoVO } from '../api/image'
 import { getSystemConfig } from '../api/systemConfig'
 import dayjs from 'dayjs'
@@ -676,6 +682,17 @@ onUnmounted(() => {
 .mv-processing { color: #fbbf24; }
 .mv-uploading { color: #60a5fa; }
 .mv-failed { color: #f87171; }
+
+/* ===== 评论区 ===== */
+.comment-wrapper {
+  margin-top: 20px;
+  padding: 24px 28px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+}
 
 /* ===== 全屏预览 ===== */
 .lightbox {
