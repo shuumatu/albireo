@@ -2,6 +2,9 @@
   <template v-if="route.meta.fullScreen">
     <router-view />
   </template>
+  <n-message-provider v-else-if="route.meta.hideLayout">
+    <router-view />
+  </n-message-provider>
   <n-message-provider v-else>
     <n-layout class="app-layout">
       <n-layout-header bordered class="app-header">

@@ -8,7 +8,7 @@
             alt="Logo"
             class="login-logo"
           />
-          <h1 class="login-title">Albireo</h1>
+          <h1 class="login-title">展示系统</h1>
           <p class="login-subtitle">{{ isRegister ? '创建新账号' : '用户登录' }}</p>
         </div>
 

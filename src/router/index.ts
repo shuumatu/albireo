@@ -9,6 +9,12 @@ import UserProfile from '../views/UserProfile.vue'
 
 const routes = [
     {
+        path: '/s/:shareCode',
+        name: 'ShareView',
+        component: () => import('../views/share/ShareView.vue'),
+        meta: { hideLayout: true, requiresAuth: false }
+    },
+    {
         path: '/login',
         name: 'Login',
         component: LoginPage,
@@ -53,10 +59,14 @@ const router = createRouter({
 
 router.beforeEach((to, _from, next) => {
   const token = localStorage.getItem('token')
-  if (to.name !== 'Login' && !token) {
+  if (to.meta.requiresAuth === false || to.name === 'Login') {
+    if (to.name === 'Login' && token) {
+      next({ path: '/' })
+    } else {
+      next()
+    }
+  } else if (!token) {
     next({ name: 'Login', query: { redirect: to.fullPath } })
-  } else if (to.name === 'Login' && token) {
-    next({ path: '/' })
   } else {
     next()
   }
