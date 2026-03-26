@@ -56,6 +56,10 @@
             </n-input>
           </n-form-item>
 
+          <div v-if="!isRegister" class="remember-row">
+            <n-checkbox v-model:checked="rememberMe">记住密码</n-checkbox>
+          </div>
+
           <n-button
             type="primary"
             block
@@ -81,11 +85,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { darkTheme, createDiscreteApi, type FormInst, type FormRules } from 'naive-ui'
 import { PersonOutline as PersonIcon, LockClosedOutline as LockIcon } from '@vicons/ionicons5'
 import { login, register } from '../api/auth'
+import { saveCredential, loadCredential, clearCredential } from '../utils/credentialCrypto'
 
 const { message } = createDiscreteApi(['message'], {
   configProviderProps: { theme: darkTheme }
@@ -95,6 +100,7 @@ const router = useRouter()
 const formRef = ref<FormInst | null>(null)
 const loading = ref(false)
 const isRegister = ref(false)
+const rememberMe = ref(false)
 
 const formData = reactive({
   username: '',
@@ -136,6 +142,15 @@ const registerRules: FormRules = {
 
 const currentRules = computed(() => isRegister.value ? registerRules : loginRules)
 
+onMounted(async () => {
+  const saved = await loadCredential()
+  if (saved) {
+    formData.username = saved.username
+    formData.password = saved.password
+    rememberMe.value = true
+  }
+})
+
 function toggleMode() {
   isRegister.value = !isRegister.value
   formRef.value?.restoreValidation()
@@ -165,6 +180,11 @@ async function handleSubmit() {
       localStorage.setItem('userId', String(data.userId))
       localStorage.setItem('username', data.username)
       localStorage.setItem('role', data.role)
+      if (rememberMe.value) {
+        await saveCredential(formData.username, formData.password)
+      } else {
+        clearCredential()
+      }
       message.success('登录成功')
       const redirect = (router.currentRoute.value.query.redirect as string) || '/'
       router.push(redirect)
@@ -226,6 +246,10 @@ async function handleSubmit() {
   font-size: 14px;
   color: rgba(255, 255, 255, 0.5);
   margin: 0;
+}
+
+.remember-row {
+  margin-bottom: 4px;
 }
 
 .login-btn {
