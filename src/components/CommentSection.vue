@@ -61,10 +61,34 @@
               </button>
             </div>
             <p class="cs-content">{{ comment.content }}</p>
-            <button class="cs-btn-text" @click="toggleReply(comment.id)">
-              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
-              回复
-            </button>
+            <div class="cs-actions">
+              <button
+                class="cs-btn-text cs-btn-like"
+                :class="{ 'is-liked': comment.liked }"
+                :disabled="likeBusy.has(comment.id)"
+                :title="comment.liked ? '取消点赞' : '点赞'"
+                @click="handleLike(comment)"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  :fill="comment.liked ? 'currentColor' : 'none'"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                </svg>
+                <span>{{ comment.likeCount > 0 ? comment.likeCount : '点赞' }}</span>
+              </button>
+              <button class="cs-btn-text" @click="toggleReply(comment.id)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+                回复
+              </button>
+            </div>
 
             <!-- 内联回复框 -->
             <div v-if="replyingTo === comment.id" class="cs-reply-compose">
@@ -106,6 +130,30 @@
                 </button>
               </div>
               <p class="cs-content">{{ reply.content }}</p>
+              <div class="cs-actions">
+                <button
+                  class="cs-btn-text cs-btn-like"
+                  :class="{ 'is-liked': reply.liked }"
+                  :disabled="likeBusy.has(reply.id)"
+                  :title="reply.liked ? '取消点赞' : '点赞'"
+                  @click="handleLike(reply)"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    :fill="reply.liked ? 'currentColor' : 'none'"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                  </svg>
+                  <span>{{ reply.likeCount > 0 ? reply.likeCount : '点赞' }}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -115,12 +163,13 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/zh-cn'
 import type { CommentTargetType, CommentVO } from '../types/comment'
 import { createComment, deleteComment, getCommentCount, getComments } from '../api/comment'
+import { toggleLike } from '../api/like'
 
 dayjs.extend(relativeTime)
 dayjs.locale('zh-cn')
@@ -137,6 +186,8 @@ const submitting = ref(false)
 const newContent = ref('')
 const replyingTo = ref<number | null>(null)
 const replyContent = ref('')
+/** 正在点赞中的评论 ID，避免连击；reactive Set 保证模板里 .has() 是响应式的 */
+const likeBusy = reactive(new Set<number>())
 
 const currentUserId = Number(localStorage.getItem('userId')) || 0
 const currentUsername = localStorage.getItem('username') || ''
@@ -215,6 +266,37 @@ async function handleReply(parentId: number) {
     console.error('回复失败:', e)
   } finally {
     submitting.value = false
+  }
+}
+
+async function handleLike(comment: CommentVO) {
+  if (likeBusy.has(comment.id)) return
+  if (!localStorage.getItem('token')) {
+    alert('请先登录后再点赞')
+    return
+  }
+
+  likeBusy.add(comment.id)
+  // 乐观更新：先反转本地状态，请求失败时回滚
+  const prevLiked = comment.liked
+  const prevCount = comment.likeCount
+  comment.liked = !prevLiked
+  comment.likeCount = prevLiked ? Math.max(0, prevCount - 1) : prevCount + 1
+
+  try {
+    const status = await toggleLike({
+      targetType: 'comment',
+      targetId: String(comment.id)
+    })
+    // 以服务端返回为准（兼容并发场景下的差异）
+    comment.liked = status.liked
+    comment.likeCount = status.likeCount
+  } catch (e) {
+    comment.liked = prevLiked
+    comment.likeCount = prevCount
+    console.error('点赞失败:', e)
+  } finally {
+    likeBusy.delete(comment.id)
   }
 }
 
@@ -360,6 +442,43 @@ onMounted(() => {
 }
 
 .cs-btn-text:hover { color: #3D9B6A; }
+
+.cs-btn-text:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 操作行：点赞 + 回复并排展示 */
+.cs-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.cs-actions .cs-btn-text { margin-top: 0; }
+
+/* 点赞按钮：未点赞为灰，已点赞为红心 */
+.cs-btn-like {
+  color: #8FA89A;
+  transition: color 0.2s, transform 0.1s;
+}
+
+.cs-btn-like:hover:not(:disabled) {
+  color: #e53e3e;
+}
+
+.cs-btn-like.is-liked {
+  color: #e53e3e;
+}
+
+.cs-btn-like:active:not(:disabled) svg {
+  transform: scale(1.2);
+}
+
+.cs-btn-like svg {
+  transition: transform 0.15s ease;
+}
 
 .cs-btn-icon {
   display: inline-flex;
