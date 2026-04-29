@@ -89,13 +89,28 @@ import { gcj02ToWgs84 } from '../utils/coordTransform'
 const router = useRouter()
 const mapContainer = ref<HTMLDivElement | null>(null)
 let map: maplibregl.Map | null = null
-const activeLayer = ref('osm')
+const activeLayer = ref('protomaps-light')
 const customDomain = ref('albireo.shuumatu.com')
 
-const baseLayers = [
-  { id: 'osm', name: '普通地图' },
-  { id: 'satellite', name: '卫星图像' }
+type BaseLayer =
+  | { id: 'osm' | 'satellite'; name: string; type: 'raster' }
+  | { id: string; name: string; type: 'vector'; styleUrl: string }
+
+const baseLayers: BaseLayer[] = [
+  { id: 'protomaps-light', name: '浅色', type: 'vector', styleUrl: '/map-styles/light.json' },
+  { id: 'protomaps-dark', name: '深色', type: 'vector', styleUrl: '/map-styles/dark.json' },
+  { id: 'osm', name: '普通地图', type: 'raster' },
+  { id: 'satellite', name: '卫星图像', type: 'raster' }
 ]
+
+const PROTOMAPS_KEY = import.meta.env.VITE_PROTOMAPS_KEY ?? ''
+
+async function loadVectorStyle(url: string): Promise<maplibregl.StyleSpecification> {
+  const res = await fetch(url)
+  const text = await res.text()
+  const filled = text.replace(/__PROTOMAPS_KEY__/g, PROTOMAPS_KEY)
+  return JSON.parse(filled) as maplibregl.StyleSpecification
+}
 
 const totalVideos = ref(0)
 const totalImages = ref(0)
@@ -345,14 +360,56 @@ function resolveThumbnail(objectKey: string, thumbnailUrl: string | null, mediaT
 
 // --- 图层切换 ---
 
-function switchLayer(layerId: string) {
+function buildRasterStyle(activeId: 'osm' | 'satellite'): maplibregl.StyleSpecification {
+  return {
+    version: 8,
+    sources: {
+      osm: {
+        type: 'raster',
+        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+        tileSize: 256,
+        attribution: '&copy; OpenStreetMap contributors'
+      },
+      satellite: {
+        type: 'raster',
+        tiles: [
+          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+        ],
+        tileSize: 256,
+        attribution: 'Tiles &copy; Esri &amp; the GIS community'
+      }
+    },
+    layers: [
+      {
+        id: 'osm-layer',
+        type: 'raster',
+        source: 'osm',
+        layout: { visibility: activeId === 'osm' ? 'visible' : 'none' }
+      },
+      {
+        id: 'satellite-layer',
+        type: 'raster',
+        source: 'satellite',
+        layout: { visibility: activeId === 'satellite' ? 'visible' : 'none' }
+      }
+    ]
+  }
+}
+
+async function switchLayer(layerId: string) {
   if (!map) return
-  baseLayers.forEach(layer => {
-    map!.setLayoutProperty(
-      layer.id + '-layer',
-      'visibility',
-      layer.id === layerId ? 'visible' : 'none'
-    )
+  const layer = baseLayers.find(l => l.id === layerId)
+  if (!layer) return
+
+  if (layer.type === 'vector') {
+    const style = await loadVectorStyle(layer.styleUrl)
+    map.setStyle(style, { diff: false })
+  } else {
+    map.setStyle(buildRasterStyle(layer.id), { diff: false })
+  }
+
+  map.once('idle', () => {
+    fetchAggregation()
   })
 }
 
@@ -515,41 +572,11 @@ onMounted(async () => {
     customDomain.value = domainConfig.value
   }
 
+  const initialStyle = await loadVectorStyle('/map-styles/light.json')
+
   map = new maplibregl.Map({
     container: mapContainer.value!,
-    style: {
-      version: 8,
-      sources: {
-        osm: {
-          type: 'raster',
-          tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-          tileSize: 256,
-          attribution: '&copy; OpenStreetMap contributors'
-        },
-        satellite: {
-          type: 'raster',
-          tiles: [
-            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-          ],
-          tileSize: 256,
-          attribution: 'Tiles &copy; Esri &amp; the GIS community'
-        }
-      },
-      layers: [
-        {
-          id: 'osm-layer',
-          type: 'raster',
-          source: 'osm',
-          layout: { visibility: 'visible' }
-        },
-        {
-          id: 'satellite-layer',
-          type: 'raster',
-          source: 'satellite',
-          layout: { visibility: 'none' }
-        }
-      ]
-    },
+    style: initialStyle,
     center: [116.4074, 39.9042],
     zoom: 5
   })
@@ -597,14 +624,23 @@ onUnmounted(() => {
   top: 10px;
   right: 10px;
   background: white;
-  padding: 10px;
+  padding: 10px 12px;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 14px;
+  gap: 6px;
+  font-size: 13px;
+  min-width: 130px;
+}
+
+.layer-switcher label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
 .time-axis {
