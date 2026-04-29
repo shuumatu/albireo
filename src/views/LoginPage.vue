@@ -1,13 +1,8 @@
 <template>
-  <n-config-provider :theme="darkTheme">
+  <n-config-provider>
     <div class="login-container">
       <div class="login-card">
         <div class="login-header">
-          <img
-            src="https://albireo.shuumatu.com/uploads/0e84dd80119bbfc52609e5e4fda0b57.png"
-            alt="Logo"
-            class="login-logo"
-          />
           <h1 class="login-title">展示系统</h1>
           <p class="login-subtitle">{{ isRegister ? '创建新账号' : '用户登录' }}</p>
         </div>
@@ -87,14 +82,12 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { darkTheme, createDiscreteApi, type FormInst, type FormRules } from 'naive-ui'
+import { createDiscreteApi, type FormInst, type FormRules } from 'naive-ui'
 import { PersonOutline as PersonIcon, LockClosedOutline as LockIcon } from '@vicons/ionicons5'
 import { login, register } from '../api/auth'
 import { saveCredential, loadCredential, clearCredential } from '../utils/credentialCrypto'
 
-const { message } = createDiscreteApi(['message'], {
-  configProviderProps: { theme: darkTheme }
-})
+const { message } = createDiscreteApi(['message'])
 
 const router = useRouter()
 const formRef = ref<FormInst | null>(null)
@@ -211,40 +204,34 @@ async function handleSubmit() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+  background: linear-gradient(135deg, #e0f2fe 0%, #f0fdf4 50%, #fef9c3 100%);
 }
 
 .login-card {
   width: 400px;
   padding: 48px 40px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(240, 253, 244, 0.88);
   backdrop-filter: blur(20px);
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(134, 239, 172, 0.6);
+  box-shadow: 0 8px 32px rgba(34, 197, 94, 0.12);
 }
 
 .login-header {
   text-align: center;
   margin-bottom: 36px;
 }
-
-.login-logo {
-  height: 56px;
-  margin-bottom: 16px;
-}
-
 .login-title {
   font-size: 24px;
   font-weight: 600;
-  color: #fff;
+  color: #0369a1;
   margin: 0 0 8px 0;
   letter-spacing: 1px;
 }
 
 .login-subtitle {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.5);
+  color: #64748b;
   margin: 0;
 }
 
@@ -270,10 +257,6 @@ async function handleSubmit() {
 
 .footer-text {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-:deep(.n-form-item-label) {
-  color: rgba(255, 255, 255, 0.7) !important;
+  color: #64748b;
 }
 </style>

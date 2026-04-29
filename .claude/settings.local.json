@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(npx vue-tsc:*)",
+      "Bash(npx vite:*)"
+    ]
+  }
+}

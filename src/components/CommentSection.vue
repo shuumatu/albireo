@@ -234,14 +234,10 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.comment-section {
-  margin-top: 20px;
-}
+.comment-section { margin-top: 0; }
 
 /* 标题 */
-.cs-header {
-  margin-bottom: 20px;
-}
+.cs-header { margin-bottom: 20px; }
 
 .cs-title {
   display: flex;
@@ -250,16 +246,14 @@ onMounted(() => {
   margin: 0;
   font-size: 17px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: #1E2A24;
 }
 
-.cs-title svg {
-  color: #94a3b8;
-}
+.cs-title svg { color: #4CAF7D; }
 
 .cs-count {
   font-weight: 400;
-  color: #64748b;
+  color: #8FA89A;
   font-size: 15px;
 }
 
@@ -267,15 +261,17 @@ onMounted(() => {
 .cs-compose {
   display: flex;
   gap: 12px;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #D4E8DC;
 }
 
 .cs-compose-avatar {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #334155, #475569);
-  color: #94a3b8;
+  background: linear-gradient(135deg, #4CAF7D, #81C784);
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -284,18 +280,15 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.cs-compose-body {
-  flex: 1;
-  min-width: 0;
-}
+.cs-compose-body { flex: 1; min-width: 0; }
 
 .cs-textarea {
   width: 100%;
   padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #F0F9F4;
+  border: 1px solid #B8D9C4;
   border-radius: 10px;
-  color: #d4d4d4;
+  color: #1E2A24;
   font-size: 14px;
   font-family: inherit;
   line-height: 1.6;
@@ -305,19 +298,14 @@ onMounted(() => {
   box-sizing: border-box;
 }
 
-.cs-textarea::placeholder {
-  color: #555;
-}
+.cs-textarea::placeholder { color: #8FA89A; }
 
 .cs-textarea:focus {
-  border-color: rgba(91, 143, 217, 0.5);
-  background: rgba(255, 255, 255, 0.06);
+  border-color: #4CAF7D;
+  background: #fff;
 }
 
-.cs-textarea-sm {
-  padding: 10px 12px;
-  font-size: 13px;
-}
+.cs-textarea-sm { padding: 10px 12px; font-size: 13px; }
 
 .cs-compose-footer {
   display: flex;
@@ -326,15 +314,8 @@ onMounted(() => {
   margin-top: 8px;
 }
 
-.cs-char-count {
-  font-size: 12px;
-  color: #555;
-}
-
-.cs-btn-group {
-  display: flex;
-  gap: 8px;
-}
+.cs-char-count { font-size: 12px; color: #8FA89A; }
+.cs-btn-group { display: flex; gap: 8px; }
 
 /* 按钮 */
 .cs-btn {
@@ -352,34 +333,15 @@ onMounted(() => {
   line-height: 1;
 }
 
-.cs-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
+.cs-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.cs-btn-primary {
-  background: rgba(91, 143, 217, 0.8);
-  color: #fff;
-}
+.cs-btn-primary { background: #4CAF7D; color: #fff; }
+.cs-btn-primary:not(:disabled):hover { background: #3D9B6A; }
 
-.cs-btn-primary:not(:disabled):hover {
-  background: rgba(91, 143, 217, 1);
-}
+.cs-btn-ghost { background: #E8F5EE; color: #5F7A6A; border: 1px solid #B8D9C4; }
+.cs-btn-ghost:hover { background: #D4EDE0; }
 
-.cs-btn-ghost {
-  background: rgba(255, 255, 255, 0.06);
-  color: #999;
-}
-
-.cs-btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #ccc;
-}
-
-.cs-btn-sm {
-  padding: 6px 14px;
-  font-size: 12px;
-}
+.cs-btn-sm { padding: 6px 14px; font-size: 12px; }
 
 .cs-btn-text {
   display: inline-flex;
@@ -389,7 +351,7 @@ onMounted(() => {
   margin-top: 6px;
   font-size: 12px;
   font-weight: 500;
-  color: #64748b;
+  color: #4CAF7D;
   background: none;
   border: none;
   cursor: pointer;
@@ -397,9 +359,7 @@ onMounted(() => {
   transition: color 0.2s;
 }
 
-.cs-btn-text:hover {
-  color: #94a3b8;
-}
+.cs-btn-text:hover { color: #3D9B6A; }
 
 .cs-btn-icon {
   display: inline-flex;
@@ -411,14 +371,11 @@ onMounted(() => {
   cursor: pointer;
   border-radius: 4px;
   transition: background 0.2s, color 0.2s;
-  color: #555;
+  color: #8FA89A;
   margin-left: auto;
 }
 
-.cs-btn-delete:hover {
-  color: #f87171;
-  background: rgba(248, 113, 113, 0.1);
-}
+.cs-btn-delete:hover { color: #e53e3e; background: rgba(229, 62, 62, 0.08); }
 
 /* 状态 */
 .cs-state {
@@ -429,59 +386,39 @@ onMounted(() => {
   padding: 40px 0;
 }
 
-.cs-state-icon {
-  color: #333;
-}
-
-.cs-state-text {
-  font-size: 13px;
-  color: #555;
-}
+.cs-state-icon { color: #B8D9C4; }
+.cs-state-text { font-size: 13px; color: #8FA89A; }
 
 .cs-spinner {
   width: 24px;
   height: 24px;
-  border: 2px solid rgba(255, 255, 255, 0.06);
-  border-top-color: rgba(255, 255, 255, 0.4);
+  border: 2px solid #D4E8DC;
+  border-top-color: #4CAF7D;
   border-radius: 50%;
   animation: cs-spin 0.7s linear infinite;
 }
 
-@keyframes cs-spin {
-  to { transform: rotate(360deg); }
-}
+@keyframes cs-spin { to { transform: rotate(360deg); } }
 
 /* 评论列表 */
-.cs-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
+.cs-list { display: flex; flex-direction: column; }
 
 .cs-item {
-  padding-bottom: 16px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 16px 0;
+  border-bottom: 1px solid #E0EDE5;
 }
 
-.cs-item:last-child {
-  border-bottom: none;
-  margin-bottom: 0;
-  padding-bottom: 0;
-}
+.cs-item:last-child { border-bottom: none; padding-bottom: 0; }
 
 /* 单条评论 */
-.cs-comment {
-  display: flex;
-  gap: 12px;
-}
+.cs-comment { display: flex; gap: 12px; }
 
 .cs-avatar {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #1e293b, #334155);
-  color: #94a3b8;
+  background: linear-gradient(135deg, #4CAF7D, #81C784);
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -490,93 +427,44 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.cs-avatar-sm {
-  width: 26px;
-  height: 26px;
-  font-size: 11px;
-}
+.cs-avatar-sm { width: 26px; height: 26px; font-size: 11px; }
 
-.cs-body {
-  flex: 1;
-  min-width: 0;
-}
+.cs-body { flex: 1; min-width: 0; }
 
 .cs-meta {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 4px;
+  margin-bottom: 5px;
 }
 
-.cs-username {
-  font-size: 13px;
-  font-weight: 600;
-  color: #cbd5e1;
-}
-
-.cs-time {
-  font-size: 12px;
-  color: #4a5568;
-}
+.cs-username { font-size: 13px; font-weight: 600; color: #1E2A24; }
+.cs-time { font-size: 12px; color: #8FA89A; }
 
 .cs-content {
   margin: 0;
   font-size: 14px;
   line-height: 1.7;
-  color: #a1a1aa;
+  color: #3D5248;
   word-break: break-word;
 }
 
 /* 回复区域 */
 .cs-replies {
-  margin-left: 44px;
+  margin-left: 46px;
   margin-top: 12px;
   padding-left: 16px;
-  border-left: 2px solid rgba(255, 255, 255, 0.05);
+  border-left: 2px solid #C8E6D4;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.cs-comment-reply .cs-content {
-  font-size: 13px;
-}
+.cs-comment-reply .cs-content { font-size: 13px; }
+.cs-reply-compose { margin-top: 10px; }
 
-.cs-reply-compose {
-  margin-top: 10px;
-}
-
-/* 响应式 */
 @media (max-width: 640px) {
-  .cs-compose {
-    gap: 10px;
-  }
-
-  .cs-compose-avatar {
-    width: 30px;
-    height: 30px;
-    font-size: 12px;
-  }
-
-  .cs-avatar {
-    width: 28px;
-    height: 28px;
-    font-size: 12px;
-  }
-
-  .cs-avatar-sm {
-    width: 22px;
-    height: 22px;
-    font-size: 10px;
-  }
-
-  .cs-replies {
-    margin-left: 36px;
-    padding-left: 12px;
-  }
-
-  .cs-title {
-    font-size: 15px;
-  }
+  .cs-replies { margin-left: 36px; padding-left: 12px; }
+  .cs-title { font-size: 15px; }
 }
 </style>
