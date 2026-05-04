@@ -1,0 +1,58 @@
+/**
+ * 地图模块共享设计 tokens。
+ * 所有浮层（MapSidebar / MapTimeline / LayerSwitcher / MapToolbar / ClusterDrawer / loading chip）
+ * 通过引入这份文件 + 套 .glass-panel 类来获得统一的玻璃拟态外观。
+ *
+ * 这些变量挂在 :root，跨 scoped 子组件可见；marker 内层（非 vue scoped）也能用。
+ */
+
+:root {
+  /* 玻璃拟态浮层 */
+  --map-glass-bg: rgba(18, 18, 18, 0.65);
+  --map-glass-bg-strong: rgba(18, 18, 18, 0.82);
+  --map-glass-border: rgba(255, 255, 255, 0.08);
+  --map-glass-border-strong: rgba(255, 255, 255, 0.14);
+  --map-glass-blur: blur(16px);
+
+  /* 文本 */
+  --map-text-primary: rgba(255, 255, 255, 0.92);
+  --map-text-secondary: rgba(255, 255, 255, 0.7);
+  --map-text-tertiary: rgba(255, 255, 255, 0.45);
+
+  /* 强调色 */
+  --map-accent: #18a058;
+  --map-accent-soft: rgba(24, 160, 88, 0.22);
+  --map-accent-strong: rgba(24, 160, 88, 0.95);
+
+  /* 媒体类型色 */
+  --map-video: #a855f7;
+  --map-image: #3b82f6;
+
+  /* 几何 */
+  --map-radius-sm: 8px;
+  --map-radius-md: 12px;
+  --map-radius-lg: 14px;
+  --map-radius-pill: 999px;
+
+  /* 阴影 */
+  --map-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.28);
+  --map-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.32);
+
+  /* 布局 */
+  --map-sidebar-width: 320px;
+  --map-header-height: 64px;
+  --map-z-overlay: 5;
+  --map-z-floating: 10;
+  --map-z-tooltip: 20;
+}
+
+/* 通用玻璃面板基类，由各浮层复用以保证视觉一致 */
+.glass-panel {
+  background: var(--map-glass-bg);
+  -webkit-backdrop-filter: var(--map-glass-blur);
+  backdrop-filter: var(--map-glass-blur);
+  border: 1px solid var(--map-glass-border);
+  border-radius: var(--map-radius-md);
+  box-shadow: var(--map-shadow-lg);
+  color: var(--map-text-primary);
+}

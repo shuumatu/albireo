@@ -1,95 +1,119 @@
 <template>
-  <div class="map-wrapper">
-    <div ref="mapContainer" class="map-container"></div>
+  <div class="map-wrapper" ref="wrapperRef" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+    <MapSidebar
+      :entries="filteredEntries"
+      :hovered-id="hoveredEntryId"
+      :collapsed="sidebarCollapsed"
+      :zoom="currentZoom"
+      :filter="entryFilter"
+      :total-videos="totalVideos"
+      :total-images="totalImages"
+      @hover-entry="onHoverEntry"
+      @select-entry="onSelectEntry"
+      @update:filter="entryFilter = $event"
+    />
 
-    <!-- 图层切换器 -->
-    <div class="layer-switcher">
-      <label v-for="layer in baseLayers" :key="layer.id">
-        <input
-          type="radio"
-          name="baseLayer"
-          :value="layer.id"
-          v-model="activeLayer"
-          @change="switchLayer(layer.id)"
+    <button
+      class="sidebar-handle glass-panel"
+      type="button"
+      :aria-label="sidebarCollapsed ? '展开侧栏' : '收起侧栏'"
+      :title="sidebarCollapsed ? '展开侧栏 (])' : '收起侧栏 ([)'"
+      @click="toggleSidebar"
+    >
+      <n-icon :component="sidebarCollapsed ? ChevronForward : ChevronBack" :size="16" />
+    </button>
+
+    <div class="map-stage">
+      <div ref="mapContainer" class="map-container"></div>
+
+      <div class="layer-switcher-pos">
+        <LayerSwitcher
+          :base-layers="layerOptions"
+          :active-layer="activeLayer"
+          @switch="switchLayer"
         />
-        {{ layer.name }}
-      </label>
+      </div>
+
+      <div class="map-toolbar-pos">
+        <MapToolbar
+          :is-fullscreen="isFullscreen"
+          @zoom-in="handleZoomIn"
+          @zoom-out="handleZoomOut"
+          @home="handleHome"
+          @fullscreen="toggleFullscreen"
+        />
+      </div>
+
+      <Transition name="chip-fade">
+        <div v-if="loading" class="loading-chip glass-panel">
+          <n-spin size="small" stroke="#18a058" />
+          <span>正在加载视口…</span>
+        </div>
+      </Transition>
+
+      <MapTimeline
+        :global-min-time="globalMinTime"
+        :global-max-time="globalMaxTime"
+        :range-start="rangeStart"
+        :range-end="rangeEnd"
+        :density-buckets="densityBuckets"
+        :total-videos="totalVideos"
+        :total-images="totalImages"
+        :tooltip-target="tooltipTarget"
+        @update:range-start="rangeStart = $event"
+        @update:range-end="rangeEnd = $event"
+        @drag-end="debouncedFetch"
+        ref="timelineRef"
+      />
     </div>
 
-    <!-- 底部时间轴 -->
-    <div class="time-axis">
-      <div class="timeline-panel">
-        <div class="timeline-header">
-          <span class="timeline-selected-range">
-            {{ formatDate(selectedStartTime) }} — {{ formatDate(selectedEndTime) }}
-          </span>
-          <span class="timeline-stats">
-            <span v-if="totalVideos > 0">🎬 {{ totalVideos }}</span>
-            <span v-if="totalImages > 0">🖼 {{ totalImages }}</span>
-          </span>
-        </div>
-        <div class="timeline-track" ref="trackRef">
-          <canvas ref="densityCanvas" class="density-canvas"></canvas>
-          <div
-            class="timeline-selection"
-            :style="selectionStyle"
-            @pointerdown="onSelectionPointerDown"
-          ></div>
-          <div
-            class="timeline-handle"
-            :style="startHandleStyle"
-            @pointerdown.stop="onStartPointerDown"
-          ></div>
-          <div
-            class="timeline-handle"
-            :style="endHandleStyle"
-            @pointerdown.stop="onEndPointerDown"
-          ></div>
-        </div>
-        <div class="timeline-footer">
-          <span class="timeline-bound">{{ formatDate(globalMinTime) }}</span>
-          <span class="timeline-bound">{{ formatDate(globalMaxTime) }}</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- 簇内媒体列表弹窗 -->
-    <n-modal v-model:show="showClusterPanel" preset="card" style="width: 640px; max-height: 80vh;">
-      <template #header>
-        簇内媒体（共 {{ clusterMediaTotal }} 项）
-      </template>
-      <div class="cluster-media-grid">
-        <div
-          v-for="item in clusterMediaList"
-          :key="item.uuid"
-          class="cluster-media-item"
-          @click="navigateToDetail(item)"
-        >
-          <img :src="resolveThumbnail(item.objectKey, item.thumbnailUrl, item.mediaType)" class="cluster-media-thumb" />
-          <div class="cluster-media-badge">{{ item.mediaType === 'video' ? '🎬' : '🖼' }}</div>
-        </div>
-      </div>
-      <div v-if="clusterMediaTotal > clusterMediaList.length" class="cluster-load-more">
-        <n-button size="small" @click="loadMoreClusterMedia">加载更多</n-button>
-      </div>
-    </n-modal>
+    <ClusterDrawer
+      v-model:show="showClusterPanel"
+      :items="clusterMediaList"
+      :total-count="clusterMediaTotal"
+      :video-count="currentClusterVideoCount"
+      :image-count="currentClusterImageCount"
+      :loading="clusterLoading"
+      :thumb-resolver="resolveItemThumb"
+      @load-more="loadMoreClusterMedia"
+      @select-media="navigateToDetail"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { animate } from 'motion-v'
+import { NIcon, NSpin } from 'naive-ui'
+import {
+  SunnyOutline,
+  MoonOutline,
+  MapOutline,
+  EarthOutline,
+  ChevronForward,
+  ChevronBack,
+} from '@vicons/ionicons5'
+
 import { getMapAggregation, getClusterMedia } from '../api/map'
 import type { MapPointVO, MapClusterVO } from '../api/map'
 import { getSystemConfig } from '../api/systemConfig'
 import { gcj02ToWgs84, wgs84ToGcj02 } from '../utils/coordTransform'
 
+import MapSidebar, { type SidebarEntry, type EntryFilter } from './map/MapSidebar.vue'
+import MapTimeline from './map/MapTimeline.vue'
+import LayerSwitcher, { type BaseLayerOption } from './map/LayerSwitcher.vue'
+import MapToolbar from './map/MapToolbar.vue'
+import ClusterDrawer from './map/ClusterDrawer.vue'
+
 const router = useRouter()
 const route = useRoute()
 const mapContainer = ref<HTMLDivElement | null>(null)
+const wrapperRef = ref<HTMLDivElement | null>(null)
+const timelineRef = ref<InstanceType<typeof MapTimeline> | null>(null)
+
 let map: maplibregl.Map | null = null
 const activeLayer = ref('protomaps-light')
 const customDomain = ref('albireo.shuumatu.com')
@@ -115,6 +139,13 @@ const baseLayers: BaseLayer[] = [
   { id: 'satellite', name: '卫星图像', type: 'raster' }
 ]
 
+const layerOptions = computed<BaseLayerOption[]>(() => [
+  { id: 'protomaps-light', name: '浅色', icon: SunnyOutline },
+  { id: 'protomaps-dark', name: '深色', icon: MoonOutline },
+  { id: 'osm', name: '普通地图', icon: MapOutline },
+  { id: 'satellite', name: '卫星图像', icon: EarthOutline },
+])
+
 const PROTOMAPS_KEY = import.meta.env.VITE_PROTOMAPS_KEY ?? ''
 
 async function loadVectorStyle(url: string): Promise<maplibregl.StyleSpecification> {
@@ -126,15 +157,31 @@ async function loadVectorStyle(url: string): Promise<maplibregl.StyleSpecificati
 
 const totalVideos = ref(0)
 const totalImages = ref(0)
+const loading = ref(false)
+const currentZoom = ref(5)
 
+// --- 侧栏 ---
+const sidebarCollapsed = ref(false)
+const entryFilter = ref<EntryFilter>('all')
+const hoveredEntryId = ref<string | null>(null)
+const isFullscreen = ref(false)
+
+// 聚合返回的最新数据保留一份给侧栏使用（marker 是命令式渲染的，没有现成的响应式 source）
+const currentClusters = shallowRef<MapClusterVO[]>([])
+const currentPoints = shallowRef<MapPointVO[]>([])
+
+// --- 簇内媒体 ---
 const showClusterPanel = ref(false)
 const clusterMediaList = ref<MapPointVO[]>([])
 const clusterMediaTotal = ref(0)
+const clusterLoading = ref(false)
+const currentClusterVideoCount = ref(0)
+const currentClusterImageCount = ref(0)
 let currentClusterId = ''
 let currentClusterPage = 1
+const CLUSTER_PAGE_SIZE = 20
 
-const trackRef = ref<HTMLDivElement | null>(null)
-const densityCanvas = ref<HTMLCanvasElement | null>(null)
+// --- 时间轴状态（由 MapTimeline 子组件 v-model 双向绑定）---
 const globalMinTime = ref(new Date('2020-01-01').getTime())
 const globalMaxTime = ref(Date.now())
 const rangeStart = ref(0)
@@ -142,22 +189,18 @@ const rangeEnd = ref(1)
 const densityBuckets = ref<number[]>([])
 const MIN_RANGE = 0.01
 
+// 拖动 tooltip 在全屏模式下要 teleport 到 wrapper（document.fullscreenElement 子树之外的元素会被隐藏）
+const tooltipTarget = computed<string | HTMLElement>(() => {
+  if (isFullscreen.value && wrapperRef.value) return wrapperRef.value
+  return 'body'
+})
+
 const selectedStartTime = computed(() =>
   globalMinTime.value + rangeStart.value * (globalMaxTime.value - globalMinTime.value)
 )
 const selectedEndTime = computed(() =>
   globalMinTime.value + rangeEnd.value * (globalMaxTime.value - globalMinTime.value)
 )
-const selectionStyle = computed(() => ({
-  left: `${rangeStart.value * 100}%`,
-  width: `${(rangeEnd.value - rangeStart.value) * 100}%`,
-}))
-const startHandleStyle = computed(() => ({
-  left: `${rangeStart.value * 100}%`,
-}))
-const endHandleStyle = computed(() => ({
-  left: `${rangeEnd.value * 100}%`,
-}))
 
 /**
  * 当前显示在地图上的标记。聚合接口每次返回都会清掉旧的、补上新的，
@@ -165,12 +208,15 @@ const endHandleStyle = computed(() => ({
  *  - 缩放后的新标记从最近旧标记位置 translate 进入
  *  - 旧标记被新标记淘汰时，先飞向最近新标记位置再缩小淡出
  * 记录每个标记当时使用的 lng/lat 是为了在下一帧用 map.project() 重新算屏幕像素位置。
+ * entryId 用来与侧栏列表项做双向 hover 联动。
  */
 interface MarkerEntry {
   marker: maplibregl.Marker
   motionWrapper: HTMLElement
+  el: HTMLElement
   lng: number
   lat: number
+  entryId: string
 }
 const markerEntries: MarkerEntry[] = []
 // 标记从源点 translate 进入 / 飞向目标的最大像素距离，超过则视为「凭空出现 / 直接消失」，避免 pan 时出现长距离飞行
@@ -179,12 +225,6 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let fetchSeq = 0
 
 // --- 时间工具 ---
-
-function formatDate(ts: number): string {
-  const d = new Date(ts)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
 
 function getTimeParams(): { startDate?: string; endDate?: string } {
   if (rangeStart.value <= 0 && rangeEnd.value >= 1) return {}
@@ -195,104 +235,10 @@ function getTimeParams(): { startDate?: string; endDate?: string } {
   }
 }
 
-// --- 时间轴交互 ---
+// --- 聚合数据驱动的时间轴更新 ---
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
-}
-
-let dragMode: 'start' | 'end' | 'range' | null = null
-let dragOriginX = 0
-let dragOriginStart = 0
-let dragOriginEnd = 0
-
-function getTrackWidth() {
-  return trackRef.value?.getBoundingClientRect().width ?? 1
-}
-
-function onStartPointerDown(e: PointerEvent) {
-  e.preventDefault()
-  dragMode = 'start'
-  dragOriginX = e.clientX
-  dragOriginStart = rangeStart.value
-  document.addEventListener('pointermove', onPointerMove)
-  document.addEventListener('pointerup', onPointerUp)
-}
-
-function onEndPointerDown(e: PointerEvent) {
-  e.preventDefault()
-  dragMode = 'end'
-  dragOriginX = e.clientX
-  dragOriginEnd = rangeEnd.value
-  document.addEventListener('pointermove', onPointerMove)
-  document.addEventListener('pointerup', onPointerUp)
-}
-
-function onSelectionPointerDown(e: PointerEvent) {
-  e.preventDefault()
-  dragMode = 'range'
-  dragOriginX = e.clientX
-  dragOriginStart = rangeStart.value
-  dragOriginEnd = rangeEnd.value
-  document.addEventListener('pointermove', onPointerMove)
-  document.addEventListener('pointerup', onPointerUp)
-}
-
-function onPointerMove(e: PointerEvent) {
-  if (!dragMode) return
-  const delta = (e.clientX - dragOriginX) / getTrackWidth()
-
-  if (dragMode === 'start') {
-    rangeStart.value = clamp(dragOriginStart + delta, 0, rangeEnd.value - MIN_RANGE)
-  } else if (dragMode === 'end') {
-    rangeEnd.value = clamp(dragOriginEnd + delta, rangeStart.value + MIN_RANGE, 1)
-  } else {
-    const span = dragOriginEnd - dragOriginStart
-    let newStart = dragOriginStart + delta
-    let newEnd = dragOriginEnd + delta
-    if (newStart < 0) { newStart = 0; newEnd = span }
-    if (newEnd > 1) { newEnd = 1; newStart = 1 - span }
-    rangeStart.value = newStart
-    rangeEnd.value = newEnd
-  }
-}
-
-function onPointerUp() {
-  dragMode = null
-  document.removeEventListener('pointermove', onPointerMove)
-  document.removeEventListener('pointerup', onPointerUp)
-  debouncedFetch()
-}
-
-// --- 密度绘制 ---
-
-function drawDensity() {
-  const canvas = densityCanvas.value
-  const track = trackRef.value
-  if (!canvas || !track) return
-
-  const rect = track.getBoundingClientRect()
-  const dpr = window.devicePixelRatio || 1
-  canvas.width = Math.round(rect.width * dpr)
-  canvas.height = Math.round(rect.height * dpr)
-
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  ctx.clearRect(0, 0, rect.width, rect.height)
-
-  const buckets = densityBuckets.value
-  if (buckets.length === 0) return
-  const maxCount = Math.max(...buckets)
-  if (maxCount === 0) return
-
-  const barW = rect.width / buckets.length
-  for (let i = 0; i < buckets.length; i++) {
-    if (buckets[i] === 0) continue
-    const t = buckets[i] / maxCount
-    ctx.fillStyle = `rgba(34,197,94,${(0.15 + t * 0.7).toFixed(3)})`
-    ctx.fillRect(i * barW, 0, Math.ceil(barW), rect.height)
-  }
 }
 
 function updateTimelineFromAggregation(data: {
@@ -314,13 +260,10 @@ function updateTimelineFromAggregation(data: {
     //  - rangeStart=0（贴左）→ 保持贴左，表达「从最老开始」；
     //  - rangeEnd=1 （贴右）→ 保持贴右，表达「到最新为止」；
     //  - 两端非贴边 → 保持绝对时间不变，只重新映射比例；
-    //  - pendingTimeRange 存在时跳过，避免和 applyPendingTimeRange 打架；
-    //  - dragMode 非空时跳过：拖动过程中 dragOriginStart/End 以旧比例为基，
-    //    中途改 rangeStart/rangeEnd 会让筛选条在指针下跳一下。
+    //  - pendingTimeRange 存在时跳过，避免和 applyPendingTimeRange 打架。
     const oldSpan = globalMaxTime.value - globalMinTime.value
     const newSpan = newMax - newMin
-    const shouldRemap =
-      !pendingTimeRange && oldSpan > 0 && newSpan > 0 && dragMode === null
+    const shouldRemap = !pendingTimeRange && oldSpan > 0 && newSpan > 0
 
     const anchorLeft = rangeStart.value <= 0
     const anchorRight = rangeEnd.value >= 1
@@ -336,14 +279,9 @@ function updateTimelineFromAggregation(data: {
       newS = clamp(newS, 0, 1)
       newE = clamp(newE, 0, 1)
 
-      // 原窗口被 clamp 压扁（说明原绝对时间整个落在新 global 同一侧之外）。
-      // 不退回全范围，而是在原本所在的那一侧保留一个 MIN_RANGE 的占位窗口，
-      // 让用户看到「筛选没丢，只是这个视口没有那段时间的数据」。
-      // 决定贴到哪一端：锚点信息优先，否则看压扁前（raw）落在哪一侧。
+      // 原窗口被 clamp 压扁时退化到一侧，避免反弹回全范围
       if (newE - newS < MIN_RANGE) {
-        const stickRight =
-          anchorRight ||
-          (!anchorLeft && prevStart > newMax)
+        const stickRight = anchorRight || (!anchorLeft && prevStart > newMax)
         if (stickRight) {
           newE = 1
           newS = 1 - MIN_RANGE
@@ -364,9 +302,8 @@ function updateTimelineFromAggregation(data: {
     })
     densityBuckets.value = bars
   }
-  nextTick(drawDensity)
+  nextTick(() => timelineRef.value?.redraw())
 
-  // 旅途回忆深链：第一次知道全局时间范围后，把 URL 中的 start/end 映射成 0~1 区间
   if (pendingTimeRange) {
     applyPendingTimeRange()
   }
@@ -386,11 +323,8 @@ function applyPendingTimeRange() {
 
   rangeStart.value = s
   rangeEnd.value = e
-  // 时间窗口缩窄了，重新拉一次聚合数据
   debouncedFetch()
 }
-
-let resizeObserver: ResizeObserver | null = null
 
 // --- 经度归一化 ---
 
@@ -478,6 +412,15 @@ function resolveThumbnail(objectKey: string, thumbnailUrl: string | null, mediaT
   return objectKeyToThumbnail(objectKey, mediaType)
 }
 
+function resolveItemThumb(item: MapPointVO): string {
+  return resolveThumbnail(item.objectKey, item.thumbnailUrl, item.mediaType)
+}
+
+// --- 媒体类型 SVG（marker 内嵌用，因为 marker DOM 是字符串拼接的，不能用 vue 组件） ---
+
+const VIDEO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>`
+const IMAGE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`
+
 // --- 图层切换 ---
 
 function buildRasterStyle(activeId: 'osm' | 'satellite'): maplibregl.StyleSpecification {
@@ -521,6 +464,8 @@ async function switchLayer(layerId: string) {
   const layer = baseLayers.find(l => l.id === layerId)
   if (!layer) return
 
+  activeLayer.value = layerId
+
   if (layer.type === 'vector') {
     const style = await loadVectorStyle(layer.styleUrl)
     map.setStyle(style, { diff: false })
@@ -561,10 +506,19 @@ function createClusterMarkerElement(cluster: MapClusterVO): { el: HTMLDivElement
     cluster.representativeMediaType
   )
 
+  // 结构说明（自外而内）：
+  //   .marker-motion-wrapper  ← motion-v 控制（scale/translate 进入退出动画）
+  //     .cluster-scale-layer  ← hover 缩放层；同时承担"badge 跟随"的责任
+  //       .cluster-marker-inner ← 视觉容器（圆角裁剪图片）
+  //         img.cluster-thumb
+  //       .cluster-count       ← 数量徽章，与 inner 同层；hover 时随 scale-layer 一起放大
+  // 把 count 放在 inner 的 overflow:hidden 之外能让它伸出圆角；放在 scale-layer 内能让它跟着 hover 一起缩放。
   el.innerHTML = `
     <div class="marker-motion-wrapper">
-      <div class="cluster-marker-inner">
-        <img src="${thumbUrl}" class="cluster-thumb" alt="" />
+      <div class="cluster-scale-layer">
+        <div class="cluster-marker-inner">
+          <img src="${thumbUrl}" class="cluster-thumb" alt="" />
+        </div>
         <span class="cluster-count">${cluster.count}</span>
       </div>
     </div>
@@ -580,12 +534,13 @@ function createPointMarkerElement(point: MapPointVO): { el: HTMLDivElement; moti
   el.style.height = '60px'
 
   const thumbUrl = resolveThumbnail(point.objectKey, point.thumbnailUrl, point.mediaType)
+  const typeSvg = point.mediaType === 'video' ? VIDEO_SVG : IMAGE_SVG
 
   el.innerHTML = `
     <div class="marker-motion-wrapper">
       <div class="point-marker-inner">
         <img src="${thumbUrl}" class="point-thumb" alt="" />
-        <span class="point-type-badge">${point.mediaType === 'video' ? '🎬' : '🖼'}</span>
+        <span class="point-type-badge ${point.mediaType}">${typeSvg}</span>
       </div>
     </div>
   `
@@ -625,14 +580,8 @@ function findNearestDelta(
   return { dx: best.x - px.x, dy: best.y - px.y }
 }
 
-// 距离 ≤ IN_PLACE_PX 时认为新旧两组在同一像素位置（典型 pan 场景：lng/lat 复用），跳过动画避免闪烁
 const IN_PLACE_PX = 4
 
-/**
- * 从 (dx, dy) 偏移位置 translate 到原位，伴随 scale/opacity，模拟「分散」效果。
- * - src 为 null（找不到合适的源点）：简单 scale + fade-in
- * - 偏移很小（pan 场景同位置）：完全跳过动画
- */
 function animateMarkerIn(target: HTMLElement, src: { dx: number; dy: number } | null) {
   if (!src) {
     animate(
@@ -651,24 +600,28 @@ function animateMarkerIn(target: HTMLElement, src: { dx: number; dy: number } | 
   )
 }
 
-/**
- * 飞向 (dx, dy) 偏移位置，同时缩小、淡出，结束后 remove marker，模拟「合并」效果。
- * - dst 为 null 时退化为原地缩小淡出
- * - 偏移很小（pan 场景同位置已有新标记接管）：直接 remove，避免闪烁
- */
 function animateMarkerOutAndRemove(entry: MarkerEntry, dst: { dx: number; dy: number } | null) {
   if (dst && Math.hypot(dst.dx, dst.dy) <= IN_PLACE_PX) {
     entry.marker.remove()
     return
   }
   const target = entry.motionWrapper
-  // 让淡出的旧标记落在新标记之下，避免在汇聚瞬间盖住新出现的簇
   target.style.zIndex = '0'
   const targetState = dst
     ? { x: dst.dx, y: dst.dy, scale: 0.4, opacity: 0 }
     : { scale: 0.5, opacity: 0 }
   const controls = animate(target, targetState, { duration: 0.35, ease: [0.4, 0, 1, 1] })
   controls.then(() => entry.marker.remove()).catch(() => entry.marker.remove())
+}
+
+function clusterEntryId(c: MapClusterVO) { return `cluster:${c.clusterId}` }
+function pointEntryId(p: MapPointVO) { return `point:${p.uuid}` }
+
+function attachMarkerHoverEvents(el: HTMLElement, entryId: string) {
+  el.addEventListener('mouseenter', () => { hoveredEntryId.value = entryId })
+  el.addEventListener('mouseleave', () => {
+    if (hoveredEntryId.value === entryId) hoveredEntryId.value = null
+  })
 }
 
 function renderClusters(
@@ -685,12 +638,14 @@ function renderClusters(
       .setLngLat([lng, tLat])
       .addTo(map!)
 
-    el.addEventListener('click', () => openClusterMedia(cluster.clusterId))
-    markerEntries.push({ marker, motionWrapper, lng, lat: tLat })
+    const entryId = clusterEntryId(cluster)
+    el.dataset.entryId = entryId
+    el.addEventListener('click', () => openClusterMedia(cluster))
+    attachMarkerHoverEvents(el, entryId)
+    markerEntries.push({ marker, motionWrapper, el, lng, lat: tLat, entryId })
 
     const px = projectLngLat(lng, tLat)
     if (px) {
-      // 「合并」：多个旧点 → 新簇。让新簇从最近的旧标记位置升起。
       const src = findNearestDelta(px, oldSnapshots, MOTION_MATCH_PX)
       animateMarkerIn(motionWrapper, src)
       newSnapshotsOut.push(px)
@@ -714,12 +669,14 @@ function renderPoints(
       .setLngLat([lng, tLat])
       .addTo(map!)
 
+    const entryId = pointEntryId(point)
+    el.dataset.entryId = entryId
     el.addEventListener('click', () => navigateToDetail(point))
-    markerEntries.push({ marker, motionWrapper, lng, lat: tLat })
+    attachMarkerHoverEvents(el, entryId)
+    markerEntries.push({ marker, motionWrapper, el, lng, lat: tLat, entryId })
 
     const px = projectLngLat(lng, tLat)
     if (px) {
-      // 「分散」：旧簇 → 多个新点。让每个新点从最近的旧簇位置飞出来。
       const src = findNearestDelta(px, oldSnapshots, MOTION_MATCH_PX)
       animateMarkerIn(motionWrapper, src)
       newSnapshotsOut.push(px)
@@ -737,10 +694,11 @@ async function fetchAggregation() {
   const wgsBounds = normalizeBounds(map.getBounds())
   // 中国境内的国行设备 EXIF GPS 实际是 GCJ02，DB geom 数值也就是 GCJ02。
   // 把视口 4 个角各自转成 GCJ02 后取最小外包矩形，再发给后端，避免 ~500m 系统性偏差导致的漏点 / 计数对不上。
-  // 4 角法可以兼顾横跨国境的视口（境外角点恒等返回 WGS84，矩形会略微膨胀 ~0.006°，最多多框入几个境外点，不会漏）。
   const bounds = bboxToGcj02(wgsBounds)
   const zoom = Math.round(map.getZoom())
+  currentZoom.value = zoom
 
+  loading.value = true
   try {
     const data = await getMapAggregation({ ...bounds, zoom, ...getTimeParams() })
 
@@ -748,6 +706,8 @@ async function fetchAggregation() {
 
     totalVideos.value = data.totalVideos
     totalImages.value = data.totalImages
+    currentClusters.value = data.clusters
+    currentPoints.value = data.points
     updateTimelineFromAggregation(data)
 
     // 摘下旧 entries，留给后面做出场动画；新渲染会重新填充 markerEntries
@@ -775,9 +735,14 @@ async function fetchAggregation() {
         animateMarkerOutAndRemove(snap.entry, dst)
       }
     }
+
+    // hover 高亮（如果当前 hoveredEntryId 命中新出现的标记）
+    syncMarkerActive()
   } catch (e) {
     if (seq !== fetchSeq) return
     console.error('地图聚合请求失败', e)
+  } finally {
+    if (seq === fetchSeq) loading.value = false
   }
 }
 
@@ -786,31 +751,198 @@ function debouncedFetch() {
   debounceTimer = setTimeout(fetchAggregation, 400)
 }
 
+// --- hover 同步：地图 marker ↔ 侧栏列表 ---
+
+watch(hoveredEntryId, () => syncMarkerActive())
+
+function syncMarkerActive() {
+  const id = hoveredEntryId.value
+  for (const entry of markerEntries) {
+    const isActive = entry.entryId === id
+    entry.el.classList.toggle('is-active', isActive)
+  }
+}
+
+function onHoverEntry(id: string | null) {
+  hoveredEntryId.value = id
+}
+
+function onSelectEntry(entry: SidebarEntry) {
+  if (!map) return
+  if (entry.kind === 'cluster') {
+    const cluster = currentClusters.value.find(c => clusterEntryId(c) === entry.id)
+    if (!cluster) return
+    const [lng, lat] = gcj02ToWgs84(cluster.longitude, cluster.latitude)
+    const targetZoom = Math.min((map.getZoom() ?? 0) + 2, 16)
+    map.flyTo({ center: [lng, lat], zoom: targetZoom, duration: 700 })
+    openClusterMedia(cluster)
+  } else {
+    const point = currentPoints.value.find(p => pointEntryId(p) === entry.id)
+    if (!point) return
+    const [lng, lat] = gcj02ToWgs84(point.longitude, point.latitude)
+    map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom() ?? 0, 14), duration: 600 })
+    pulseMarker(entry.id)
+  }
+}
+
+function pulseMarker(entryId: string) {
+  const entry = markerEntries.find(e => e.entryId === entryId)
+  if (!entry) return
+  // 短暂闪烁高亮，0.9s 后自动取消
+  entry.el.classList.add('is-pulse')
+  window.setTimeout(() => entry.el.classList.remove('is-pulse'), 900)
+}
+
+// --- 侧栏 entries 派生 ---
+
+function clusterTitle(c: MapClusterVO) {
+  return `${c.count} 项媒体`
+}
+
+function clusterSubtitle(c: MapClusterVO) {
+  const parts: string[] = []
+  if (c.imageCount > 0) parts.push(`${c.imageCount} 图片`)
+  if (c.videoCount > 0) parts.push(`${c.videoCount} 视频`)
+  return parts.join(' · ')
+}
+
+function pointTitleFromKey(p: MapPointVO) {
+  // 取最后一段路径作为「文件名」展示
+  const key = p.objectKey || ''
+  const seg = key.split('/').filter(Boolean).pop() ?? p.uuid
+  return seg.length > 36 ? seg.slice(0, 33) + '…' : seg
+}
+
+function pointSubtitle(p: MapPointVO) {
+  const ns = p.latitude >= 0 ? 'N' : 'S'
+  const ew = p.longitude >= 0 ? 'E' : 'W'
+  return `${Math.abs(p.latitude).toFixed(3)}°${ns} ${Math.abs(p.longitude).toFixed(3)}°${ew}`
+}
+
+const allEntries = computed<SidebarEntry[]>(() => {
+  const list: SidebarEntry[] = []
+  for (const c of currentClusters.value) {
+    list.push({
+      id: clusterEntryId(c),
+      kind: 'cluster',
+      title: clusterTitle(c),
+      subtitle: clusterSubtitle(c),
+      thumb: resolveThumbnail(c.representativeObjectKey, c.representativeThumbnailUrl, c.representativeMediaType),
+      count: c.count,
+      videoCount: c.videoCount,
+      imageCount: c.imageCount,
+      mediaType: c.representativeMediaType,
+      lng: c.longitude,
+      lat: c.latitude,
+      raw: c,
+    })
+  }
+  for (const p of currentPoints.value) {
+    list.push({
+      id: pointEntryId(p),
+      kind: 'point',
+      title: pointTitleFromKey(p),
+      subtitle: pointSubtitle(p),
+      thumb: resolveThumbnail(p.objectKey, p.thumbnailUrl, p.mediaType),
+      count: 1,
+      videoCount: p.mediaType === 'video' ? 1 : 0,
+      imageCount: p.mediaType === 'image' ? 1 : 0,
+      mediaType: p.mediaType,
+      lng: p.longitude,
+      lat: p.latitude,
+      raw: p,
+    })
+  }
+  // 簇优先 + 数量降序，单点放后面
+  return list.sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === 'cluster' ? -1 : 1
+    return b.count - a.count
+  })
+})
+
+const filteredEntries = computed<SidebarEntry[]>(() => {
+  const f = entryFilter.value
+  if (f === 'all') return allEntries.value
+  if (f === 'video') return allEntries.value.filter(e => e.videoCount > 0)
+  return allEntries.value.filter(e => e.imageCount > 0)
+})
+
+// --- 侧栏折叠 ---
+
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+  // 等 CSS transition 完成（300ms）再 resize，否则 maplibre 会按旧宽度渲染
+  window.setTimeout(() => {
+    map?.resize()
+  }, 320)
+}
+
+// --- 地图工具栏 ---
+
+function handleZoomIn() { map?.zoomIn() }
+function handleZoomOut() { map?.zoomOut() }
+function handleHome() {
+  if (!map) return
+  map.flyTo({ center: [116.4074, 39.9042], zoom: 5, duration: 800 })
+}
+
+async function toggleFullscreen() {
+  const el = wrapperRef.value
+  if (!el) return
+  try {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen()
+    } else {
+      await el.requestFullscreen()
+    }
+  } catch (err) {
+    console.warn('全屏切换失败', err)
+  }
+}
+
+function onFullscreenChange() {
+  isFullscreen.value = document.fullscreenElement === wrapperRef.value
+  // 全屏切换会改变可视区，需重置地图尺寸
+  window.setTimeout(() => map?.resize(), 80)
+}
+
 // --- 簇内媒体 ---
 
-async function openClusterMedia(clusterId: string) {
-  currentClusterId = clusterId
+async function openClusterMedia(cluster: MapClusterVO) {
+  currentClusterId = cluster.clusterId
   currentClusterPage = 1
   clusterMediaList.value = []
-  clusterMediaTotal.value = 0
+  clusterMediaTotal.value = cluster.count
+  currentClusterVideoCount.value = cluster.videoCount
+  currentClusterImageCount.value = cluster.imageCount
   showClusterPanel.value = true
 
+  clusterLoading.value = true
   try {
-    const res = await getClusterMedia(clusterId, 1, 20)
+    const res = await getClusterMedia(cluster.clusterId, 1, CLUSTER_PAGE_SIZE)
+    if (currentClusterId !== cluster.clusterId) return
     clusterMediaList.value = res.data
     clusterMediaTotal.value = res.total
   } catch (e) {
     console.error('获取簇内媒体失败', e)
+  } finally {
+    clusterLoading.value = false
   }
 }
 
 async function loadMoreClusterMedia() {
-  currentClusterPage++
+  if (clusterLoading.value) return
+  if (clusterMediaList.value.length >= clusterMediaTotal.value) return
+  const nextPage = currentClusterPage + 1
+  clusterLoading.value = true
   try {
-    const res = await getClusterMedia(currentClusterId, currentClusterPage, 20)
+    const res = await getClusterMedia(currentClusterId, nextPage, CLUSTER_PAGE_SIZE)
+    currentClusterPage = nextPage
     clusterMediaList.value.push(...res.data)
   } catch (e) {
     console.error('加载更多失败', e)
+  } finally {
+    clusterLoading.value = false
   }
 }
 
@@ -825,9 +957,69 @@ function navigateToDetail(point: MapPointVO) {
   window.open(resolved.href, '_blank', 'noopener')
 }
 
+// --- 键盘快捷键 ---
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  const tag = target.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+  if (target.isContentEditable) return true
+  return false
+}
+
+function onKeyDown(e: KeyboardEvent) {
+  if (isTypingTarget(e.target)) return
+  if (e.metaKey || e.ctrlKey || e.altKey) return
+
+  switch (e.key) {
+    case '[':
+      sidebarCollapsed.value = true
+      window.setTimeout(() => map?.resize(), 320)
+      e.preventDefault()
+      break
+    case ']':
+      sidebarCollapsed.value = false
+      window.setTimeout(() => map?.resize(), 320)
+      e.preventDefault()
+      break
+    case '+':
+    case '=':
+      handleZoomIn()
+      e.preventDefault()
+      break
+    case '-':
+    case '_':
+      handleZoomOut()
+      e.preventDefault()
+      break
+    case 'f':
+    case 'F':
+      toggleFullscreen()
+      e.preventDefault()
+      break
+    case 'h':
+    case 'H':
+      handleHome()
+      e.preventDefault()
+      break
+    case 'Escape':
+      if (showClusterPanel.value) {
+        showClusterPanel.value = false
+      }
+      break
+  }
+}
+
 // --- 生命周期 ---
 
+let resizeObserver: ResizeObserver | null = null
+
 onMounted(async () => {
+  // 移动端默认收起侧栏，避免 320px 侧栏挤压窄屏地图
+  if (window.innerWidth < 720) {
+    sidebarCollapsed.value = true
+  }
+
   const domainConfig = await getSystemConfig('storage', 'custom_domain').catch(() => null)
   if (domainConfig?.value) {
     customDomain.value = domainConfig.value
@@ -835,20 +1027,16 @@ onMounted(async () => {
 
   const initialStyle = await loadVectorStyle('/map-styles/light.json')
 
-  // 解析「从旅途卡片跳过来」的 query 参数：bbox 优先，否则 lat/lng；time 暂存到 pendingTimeRange
   const initialView = resolveInitialView()
 
   map = new maplibregl.Map({
     container: mapContainer.value!,
     style: initialStyle,
     center: initialView.center,
-    zoom: initialView.zoom
+    zoom: initialView.zoom,
   })
 
   map.on('load', () => {
-    // bbox 跳转：等地图 load 完用 fitBounds 让媒体范围居中。
-    // - padding 留出周围少量上下文，bottom 给时间轴让位避免遮挡；
-    // - maxZoom=13 限制小 bbox（如一次城市内旅游）的最高 zoom，避免放大到只看见几个街区。
     if (pendingBbox && map) {
       map.fitBounds(pendingBbox, {
         padding: { top: 80, bottom: 160, left: 80, right: 80 },
@@ -861,34 +1049,33 @@ onMounted(async () => {
   })
 
   map.on('moveend', fetchAggregation)
+  map.on('zoom', () => {
+    if (map) currentZoom.value = Math.round(map.getZoom())
+  })
 
-  resizeObserver = new ResizeObserver(drawDensity)
-  if (trackRef.value) resizeObserver.observe(trackRef.value)
+  document.addEventListener('keydown', onKeyDown)
+  document.addEventListener('fullscreenchange', onFullscreenChange)
+
+  // 监听 wrapper 尺寸变化，自动 resize 地图（侧栏 transition / 全屏 / 窗口缩放都会触发）
+  if (wrapperRef.value) {
+    resizeObserver = new ResizeObserver(() => map?.resize())
+    resizeObserver.observe(wrapperRef.value)
+  }
 })
 
-/**
- * 根据 URL query 决定地图初始中心 / 缩放，并把 bbox / 时间范围暂存以备 load / 首次聚合后应用。
- * 优先级：bbox > lat/lng > 默认（北京，zoom 5）。
- */
 function resolveInitialView(): { center: [number, number]; zoom: number } {
   const defaultView = { center: [116.4074, 39.9042] as [number, number], zoom: 5 }
   let center = defaultView.center
   let zoom = defaultView.zoom
 
-  // 1) bbox 模式（旅途卡片新链接）
   const bbox = parseBboxQuery()
   if (bbox) {
-    // 国行设备 EXIF GPS 实际是 GCJ02，DB geom 数值就是 GCJ02。
-    // 旅途接口的 bbox = ST_Extent(geom)，所以也是 GCJ02 数值。
-    // fitBounds 接收的是地图坐标（WGS84），需要把两个角点先转回 WGS84。
     const [swLng, swLat] = gcj02ToWgs84(bbox[0][0], bbox[0][1])
     const [neLng, neLat] = gcj02ToWgs84(bbox[1][0], bbox[1][1])
     pendingBbox = [[swLng, swLat], [neLng, neLat]]
-    // 先把 center 设到 bbox 中心，避免地图初始化短暂闪过北京；fitBounds 在 load 后再精确收紧
     center = [(swLng + neLng) / 2, (swLat + neLat) / 2]
     zoom = 8
   } else {
-    // 2) lat/lng 模式（向后兼容）
     const lat = parseFloat(String(route.query.lat ?? ''))
     const lng = parseFloat(String(route.query.lng ?? ''))
     if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
@@ -898,7 +1085,6 @@ function resolveInitialView(): { center: [number, number]; zoom: number } {
     }
   }
 
-  // 3) 时间窗口：精确使用 trip 的 MIN/MAX shot_at，不再加 buffer，确保计数与卡片一致
   const startRaw = route.query.start
   const endRaw = route.query.end
   if (typeof startRaw === 'string' && typeof endRaw === 'string') {
@@ -912,7 +1098,6 @@ function resolveInitialView(): { center: [number, number]; zoom: number } {
   return { center, zoom }
 }
 
-/** 解析 ?bboxMinLng&bboxMinLat&bboxMaxLng&bboxMaxLat → [[minLng,minLat],[maxLng,maxLat]] (GCJ02) */
 function parseBboxQuery(): [[number, number], [number, number]] | null {
   const minLng = parseFloat(String(route.query.bboxMinLng ?? ''))
   const minLat = parseFloat(String(route.query.bboxMinLat ?? ''))
@@ -935,174 +1120,130 @@ onUnmounted(() => {
     resizeObserver.disconnect()
     resizeObserver = null
   }
-  document.removeEventListener('pointermove', onPointerMove)
-  document.removeEventListener('pointerup', onPointerUp)
+  document.removeEventListener('keydown', onKeyDown)
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
 })
 </script>
 
-<style>
+<style scoped>
+@import './map/mapTokens.css';
+
 .map-wrapper {
   height: 100%;
   width: 100%;
+  display: flex;
   position: relative;
+  background: #0e0e0e;
+  overflow: hidden;
+}
+
+.map-stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
 }
 
 .map-container {
-  height: 100%;
-  width: 100%;
-}
-
-.layer-switcher {
   position: absolute;
-  top: 10px;
-  right: 10px;
-  background: white;
-  padding: 10px 12px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
-  min-width: 130px;
+  inset: 0;
 }
 
-.layer-switcher label {
-  display: flex;
+/* 侧栏与折叠把手 */
+.sidebar-handle {
+  position: absolute;
+  top: 50%;
+  /* 默认贴在侧栏右沿 */
+  left: var(--map-sidebar-width);
+  transform: translate(-50%, -50%);
+  width: 24px;
+  height: 56px;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid var(--map-glass-border);
+  background: var(--map-glass-bg-strong);
+  color: var(--map-text-secondary);
   cursor: pointer;
-  white-space: nowrap;
+  z-index: calc(var(--map-z-floating) + 1);
+  transition: left 0.28s cubic-bezier(0.22, 1, 0.36, 1), background 0.18s ease, color 0.18s ease;
+  padding: 0;
 }
 
-.time-axis {
-  position: absolute;
-  bottom: 0;
+.sidebar-handle:hover {
+  background: var(--map-glass-bg-strong);
+  color: var(--map-text-primary);
+}
+
+.map-wrapper.sidebar-collapsed .sidebar-handle {
   left: 0;
-  right: 0;
-  z-index: 1;
-  padding: 12px 20px;
-  pointer-events: none;
+  transform: translate(0, -50%);
+  border-radius: 0 12px 12px 0;
+  border-left: none;
 }
 
-.timeline-panel {
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-radius: 14px;
-  padding: 10px 16px 8px;
-  pointer-events: auto;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
-}
-
-.timeline-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
-.timeline-selected-range {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.9);
-  font-variant-numeric: tabular-nums;
-  user-select: none;
-  letter-spacing: 0.02em;
-}
-
-.timeline-stats {
-  display: flex;
-  gap: 10px;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.75);
-  user-select: none;
-}
-
-.timeline-track {
-  position: relative;
-  height: 32px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 6px;
-  overflow: hidden;
-  user-select: none;
-  touch-action: none;
-}
-
-.density-canvas {
+/* 浮层定位（避开侧栏） */
+.layer-switcher-pos {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
+  top: 12px;
+  right: 12px;
+  z-index: var(--map-z-floating);
 }
 
-.timeline-selection {
+.map-toolbar-pos {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.10);
-  cursor: grab;
-  z-index: 1;
-  border-top: 1px solid rgba(255, 255, 255, 0.18);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
-  transition: background 0.1s;
+  top: 64px;
+  right: 12px;
+  z-index: var(--map-z-floating);
 }
 
-.timeline-selection:hover {
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.timeline-selection:active {
-  cursor: grabbing;
-  background: rgba(255, 255, 255, 0.18);
-}
-
-.timeline-handle {
+.loading-chip {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 16px;
-  transform: translateX(-50%);
-  cursor: col-resize;
-  z-index: 2;
-}
-
-.timeline-handle::before {
-  content: '';
-  position: absolute;
+  top: 12px;
   left: 50%;
-  top: 0;
-  bottom: 0;
-  width: 2px;
   transform: translateX(-50%);
-  background: rgba(255, 255, 255, 0.85);
-  border-radius: 1px;
-  box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
-  transition: width 0.15s, background 0.15s, box-shadow 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: var(--map-radius-pill);
+  font-size: 12px;
+  color: var(--map-text-secondary);
+  z-index: var(--map-z-floating);
+  pointer-events: none;
 }
 
-.timeline-handle:hover::before,
-.timeline-handle:active::before {
-  width: 3px;
-  background: #fff;
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.3), 0 0 4px rgba(0, 0, 0, 0.5);
+.chip-fade-enter-active,
+.chip-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
-.timeline-footer {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 4px;
+.chip-fade-enter-from,
+.chip-fade-leave-to {
+  opacity: 0;
+  transform: translate(-50%, -8px);
 }
 
-.timeline-bound {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.45);
-  font-variant-numeric: tabular-nums;
-  user-select: none;
+/* 侧栏过渡：宽度收缩动画由 MapSidebar.collapsed 自身控制；
+   .sidebar-collapsed 时 wrapper 进入"无侧栏"流式布局 */
+.map-sidebar {
+  transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+              border-right-width 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
+
+@media (max-width: 720px) {
+  .map-toolbar-pos {
+    top: auto;
+    bottom: 130px;
+  }
+}
+</style>
+
+<!-- maplibre marker 是 document.createElement 出来直接挂在地图 canvas 上的，
+     不在 Vue scoped 选择器作用域内，相关样式必须放在非 scoped 块。 -->
+<style>
+@import './map/mapTokens.css';
 
 /* ---- 标记锚点（MapLibre 直接控制此元素的 transform，不要在这里加 transition/transform） ---- */
 .marker-anchor {
@@ -1110,8 +1251,10 @@ onUnmounted(() => {
 }
 
 /* ---- motion 包裹层：motion-v 的 animate() 独占这一层的 transform/opacity ----
-   不要在这层写 hover、transition，避免和 WAAPI 抢同一属性；hover 的视觉缩放放在内层。 */
+   不要在这层写 hover、transition，避免和 WAAPI 抢同一属性；hover 的视觉缩放放在内层。
+   position: relative 让 .cluster-count 等"溢出徽章"以包裹层为定位根，能伸出 .cluster-marker-inner 的 overflow:hidden 边界。 */
 .marker-motion-wrapper {
+  position: relative;
   width: 100%;
   height: 100%;
   transform-origin: 50% 50%;
@@ -1119,22 +1262,37 @@ onUnmounted(() => {
 }
 
 /* ---- 聚合簇标记 ---- */
+/* hover 缩放层：把 inner + count 都包进来一起 scale，避免徽章脱节。
+   transform-origin 居中，让外圈视觉效果以 marker 中心为锚。 */
+.cluster-scale-layer {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 50%;
+  transition: transform 0.2s ease;
+}
+
+.marker-anchor:hover .cluster-scale-layer,
+.marker-anchor.is-active .cluster-scale-layer {
+  transform: scale(1.12);
+  z-index: 10;
+}
+
 .cluster-marker-inner {
   position: relative;
   width: 100%;
   height: 100%;
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
-  border: 3px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border: 3px solid rgba(255, 255, 255, 0.92);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
   box-sizing: border-box;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
-.marker-anchor:hover .cluster-marker-inner {
-  transform: scale(1.12);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  z-index: 10;
+.marker-anchor:hover .cluster-marker-inner,
+.marker-anchor.is-active .cluster-marker-inner {
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55), 0 0 0 4px rgba(24, 160, 88, 0.35);
+  border-color: var(--map-accent);
 }
 
 .cluster-thumb {
@@ -1146,19 +1304,22 @@ onUnmounted(() => {
 
 .cluster-count {
   position: absolute;
-  bottom: 0;
-  right: 0;
-  background: #18a058;
+  top: -6px;
+  right: -6px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  background: var(--map-accent-strong);
   color: #fff;
   font-size: 11px;
   font-weight: 700;
-  min-width: 20px;
-  height: 20px;
-  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+  line-height: 22px;
   text-align: center;
-  border-radius: 10px;
-  padding: 0 5px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  border-radius: 11px;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  font-family: system-ui, sans-serif;
 }
 
 /* ---- 单点标记 ---- */
@@ -1166,17 +1327,19 @@ onUnmounted(() => {
   position: relative;
   width: 100%;
   height: 100%;
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
-  border: 2px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
   box-sizing: border-box;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
-.marker-anchor:hover .point-marker-inner {
+.marker-anchor:hover .point-marker-inner,
+.marker-anchor.is-active .point-marker-inner {
   transform: scale(1.1);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.5), 0 0 0 4px rgba(24, 160, 88, 0.32);
+  border-color: var(--map-accent);
   z-index: 10;
 }
 
@@ -1189,58 +1352,46 @@ onUnmounted(() => {
 
 .point-type-badge {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  font-size: 12px;
-  line-height: 1;
-  background: rgba(0, 0, 0, 0.5);
-  border-radius: 4px;
-  padding: 2px 3px;
+  top: 4px;
+  left: 4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #fff;
 }
 
-/* ---- 簇内媒体弹窗 ---- */
-.cluster-media-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 8px;
-  max-height: 60vh;
-  overflow-y: auto;
-  padding: 4px;
+.point-type-badge.video {
+  background: color-mix(in srgb, var(--map-video) 80%, rgba(0, 0, 0, 0.5));
 }
 
-.cluster-media-item {
-  position: relative;
-  aspect-ratio: 1;
-  border-radius: 8px;
-  overflow: hidden;
-  cursor: pointer;
-  transition: transform 0.15s ease;
+.point-type-badge.image {
+  background: color-mix(in srgb, var(--map-image) 80%, rgba(0, 0, 0, 0.5));
 }
 
-.cluster-media-item:hover {
-  transform: scale(1.04);
-}
-
-.cluster-media-thumb {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.point-type-badge svg {
   display: block;
 }
 
-.cluster-media-badge {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  font-size: 14px;
-  background: rgba(0, 0, 0, 0.5);
-  border-radius: 4px;
-  padding: 2px 4px;
-  line-height: 1;
+/* ---- pulse: 侧栏点击单点时短暂高亮 ---- */
+@keyframes marker-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(24, 160, 88, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 0 18px rgba(24, 160, 88, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(24, 160, 88, 0);
+  }
 }
 
-.cluster-load-more {
-  text-align: center;
-  padding: 12px 0 4px;
+.marker-anchor.is-pulse .cluster-marker-inner,
+.marker-anchor.is-pulse .point-marker-inner {
+  animation: marker-pulse 0.9s ease-out;
 }
 </style>
