@@ -81,6 +81,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import { animate } from 'motion-v'
 import { getMapAggregation, getClusterMedia } from '../api/map'
 import type { MapPointVO, MapClusterVO } from '../api/map'
 import { getSystemConfig } from '../api/systemConfig'
@@ -158,7 +159,22 @@ const endHandleStyle = computed(() => ({
   left: `${rangeEnd.value * 100}%`,
 }))
 
-const markers: maplibregl.Marker[] = []
+/**
+ * 当前显示在地图上的标记。聚合接口每次返回都会清掉旧的、补上新的，
+ * 同时用 motion-v 的 animate() 在新旧之间做「合并 / 分散」过渡：
+ *  - 缩放后的新标记从最近旧标记位置 translate 进入
+ *  - 旧标记被新标记淘汰时，先飞向最近新标记位置再缩小淡出
+ * 记录每个标记当时使用的 lng/lat 是为了在下一帧用 map.project() 重新算屏幕像素位置。
+ */
+interface MarkerEntry {
+  marker: maplibregl.Marker
+  motionWrapper: HTMLElement
+  lng: number
+  lat: number
+}
+const markerEntries: MarkerEntry[] = []
+// 标记从源点 translate 进入 / 飞向目标的最大像素距离，超过则视为「凭空出现 / 直接消失」，避免 pan 时出现长距离飞行
+const MOTION_MATCH_PX = 320
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let fetchSeq = 0
 
@@ -470,11 +486,18 @@ async function switchLayer(layerId: string) {
 // --- 标记管理 ---
 
 function clearMarkers() {
-  markers.forEach(m => m.remove())
-  markers.length = 0
+  markerEntries.forEach(e => e.marker.remove())
+  markerEntries.length = 0
 }
 
-function createClusterMarkerElement(cluster: MapClusterVO): HTMLDivElement {
+/**
+ * marker DOM 结构：
+ *   .marker-anchor          ← 由 MapLibre 直接 transform 定位，禁止挂自己的 transform/transition
+ *     .marker-motion-wrapper ← motion-v animate() 的目标，独占 transform/opacity，不写 hover 样式
+ *       .cluster-marker-inner / .point-marker-inner ← 视觉容器，hover 缩放在这里
+ * 三层分离避免 motion 的 WAAPI 把 hover 的 transform 覆盖掉。
+ */
+function createClusterMarkerElement(cluster: MapClusterVO): { el: HTMLDivElement; motionWrapper: HTMLDivElement } {
   const el = document.createElement('div')
   el.className = 'marker-anchor'
 
@@ -489,15 +512,18 @@ function createClusterMarkerElement(cluster: MapClusterVO): HTMLDivElement {
   )
 
   el.innerHTML = `
-    <div class="cluster-marker-inner">
-      <img src="${thumbUrl}" class="cluster-thumb" alt="" />
-      <span class="cluster-count">${cluster.count}</span>
+    <div class="marker-motion-wrapper">
+      <div class="cluster-marker-inner">
+        <img src="${thumbUrl}" class="cluster-thumb" alt="" />
+        <span class="cluster-count">${cluster.count}</span>
+      </div>
     </div>
   `
-  return el
+  const motionWrapper = el.querySelector('.marker-motion-wrapper') as HTMLDivElement
+  return { el, motionWrapper }
 }
 
-function createPointMarkerElement(point: MapPointVO): HTMLDivElement {
+function createPointMarkerElement(point: MapPointVO): { el: HTMLDivElement; motionWrapper: HTMLDivElement } {
   const el = document.createElement('div')
   el.className = 'marker-anchor'
   el.style.width = '60px'
@@ -506,18 +532,103 @@ function createPointMarkerElement(point: MapPointVO): HTMLDivElement {
   const thumbUrl = resolveThumbnail(point.objectKey, point.thumbnailUrl, point.mediaType)
 
   el.innerHTML = `
-    <div class="point-marker-inner">
-      <img src="${thumbUrl}" class="point-thumb" alt="" />
-      <span class="point-type-badge">${point.mediaType === 'video' ? '🎬' : '🖼'}</span>
+    <div class="marker-motion-wrapper">
+      <div class="point-marker-inner">
+        <img src="${thumbUrl}" class="point-thumb" alt="" />
+        <span class="point-type-badge">${point.mediaType === 'video' ? '🎬' : '🖼'}</span>
+      </div>
     </div>
   `
-  return el
+  const motionWrapper = el.querySelector('.marker-motion-wrapper') as HTMLDivElement
+  return { el, motionWrapper }
 }
 
-function renderClusters(clusters: MapClusterVO[]) {
+// --- 动画辅助 ---
+
+interface PixelPos { x: number; y: number }
+interface OldEntrySnapshot extends PixelPos { entry: MarkerEntry }
+
+function projectLngLat(lng: number, lat: number): PixelPos | null {
+  if (!map) return null
+  const p = map.project([lng, lat])
+  return { x: p.x, y: p.y }
+}
+
+/** 在 snapshots 中找出离 px 最近的一个（限制最大距离），返回到该点的 (dx, dy) 偏移。 */
+function findNearestDelta(
+  px: PixelPos,
+  snapshots: PixelPos[],
+  maxDist: number,
+): { dx: number; dy: number } | null {
+  let best: PixelPos | null = null
+  let bestD = maxDist
+  for (const s of snapshots) {
+    const dx = s.x - px.x
+    const dy = s.y - px.y
+    const d = Math.hypot(dx, dy)
+    if (d < bestD) {
+      bestD = d
+      best = s
+    }
+  }
+  if (!best) return null
+  return { dx: best.x - px.x, dy: best.y - px.y }
+}
+
+// 距离 ≤ IN_PLACE_PX 时认为新旧两组在同一像素位置（典型 pan 场景：lng/lat 复用），跳过动画避免闪烁
+const IN_PLACE_PX = 4
+
+/**
+ * 从 (dx, dy) 偏移位置 translate 到原位，伴随 scale/opacity，模拟「分散」效果。
+ * - src 为 null（找不到合适的源点）：简单 scale + fade-in
+ * - 偏移很小（pan 场景同位置）：完全跳过动画
+ */
+function animateMarkerIn(target: HTMLElement, src: { dx: number; dy: number } | null) {
+  if (!src) {
+    animate(
+      target,
+      { scale: [0.7, 1], opacity: [0, 1] },
+      { duration: 0.25, ease: [0.22, 1, 0.36, 1] },
+    )
+    return
+  }
+  const distance = Math.hypot(src.dx, src.dy)
+  if (distance <= IN_PLACE_PX) return
+  animate(
+    target,
+    { x: [src.dx, 0], y: [src.dy, 0], scale: [0.55, 1], opacity: [0, 1] },
+    { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
+  )
+}
+
+/**
+ * 飞向 (dx, dy) 偏移位置，同时缩小、淡出，结束后 remove marker，模拟「合并」效果。
+ * - dst 为 null 时退化为原地缩小淡出
+ * - 偏移很小（pan 场景同位置已有新标记接管）：直接 remove，避免闪烁
+ */
+function animateMarkerOutAndRemove(entry: MarkerEntry, dst: { dx: number; dy: number } | null) {
+  if (dst && Math.hypot(dst.dx, dst.dy) <= IN_PLACE_PX) {
+    entry.marker.remove()
+    return
+  }
+  const target = entry.motionWrapper
+  // 让淡出的旧标记落在新标记之下，避免在汇聚瞬间盖住新出现的簇
+  target.style.zIndex = '0'
+  const targetState = dst
+    ? { x: dst.dx, y: dst.dy, scale: 0.4, opacity: 0 }
+    : { scale: 0.5, opacity: 0 }
+  const controls = animate(target, targetState, { duration: 0.35, ease: [0.4, 0, 1, 1] })
+  controls.then(() => entry.marker.remove()).catch(() => entry.marker.remove())
+}
+
+function renderClusters(
+  clusters: MapClusterVO[],
+  oldSnapshots: OldEntrySnapshot[],
+  newSnapshotsOut: PixelPos[],
+) {
   const centerLng = map!.getCenter().lng
   clusters.forEach(cluster => {
-    const el = createClusterMarkerElement(cluster)
+    const { el, motionWrapper } = createClusterMarkerElement(cluster)
     const [tLng, tLat] = gcj02ToWgs84(cluster.longitude, cluster.latitude)
     const lng = nearestLng(tLng, centerLng)
     const marker = new maplibregl.Marker({ element: el })
@@ -525,14 +636,28 @@ function renderClusters(clusters: MapClusterVO[]) {
       .addTo(map!)
 
     el.addEventListener('click', () => openClusterMedia(cluster.clusterId))
-    markers.push(marker)
+    markerEntries.push({ marker, motionWrapper, lng, lat: tLat })
+
+    const px = projectLngLat(lng, tLat)
+    if (px) {
+      // 「合并」：多个旧点 → 新簇。让新簇从最近的旧标记位置升起。
+      const src = findNearestDelta(px, oldSnapshots, MOTION_MATCH_PX)
+      animateMarkerIn(motionWrapper, src)
+      newSnapshotsOut.push(px)
+    } else {
+      animateMarkerIn(motionWrapper, null)
+    }
   })
 }
 
-function renderPoints(points: MapPointVO[]) {
+function renderPoints(
+  points: MapPointVO[],
+  oldSnapshots: OldEntrySnapshot[],
+  newSnapshotsOut: PixelPos[],
+) {
   const centerLng = map!.getCenter().lng
   points.forEach(point => {
-    const el = createPointMarkerElement(point)
+    const { el, motionWrapper } = createPointMarkerElement(point)
     const [tLng, tLat] = gcj02ToWgs84(point.longitude, point.latitude)
     const lng = nearestLng(tLng, centerLng)
     const marker = new maplibregl.Marker({ element: el })
@@ -540,7 +665,17 @@ function renderPoints(points: MapPointVO[]) {
       .addTo(map!)
 
     el.addEventListener('click', () => navigateToDetail(point))
-    markers.push(marker)
+    markerEntries.push({ marker, motionWrapper, lng, lat: tLat })
+
+    const px = projectLngLat(lng, tLat)
+    if (px) {
+      // 「分散」：旧簇 → 多个新点。让每个新点从最近的旧簇位置飞出来。
+      const src = findNearestDelta(px, oldSnapshots, MOTION_MATCH_PX)
+      animateMarkerIn(motionWrapper, src)
+      newSnapshotsOut.push(px)
+    } else {
+      animateMarkerIn(motionWrapper, null)
+    }
   })
 }
 
@@ -561,16 +696,34 @@ async function fetchAggregation() {
 
     if (seq !== fetchSeq) return
 
-    clearMarkers()
     totalVideos.value = data.totalVideos
     totalImages.value = data.totalImages
     updateTimelineFromAggregation(data)
 
+    // 摘下旧 entries，留给后面做出场动画；新渲染会重新填充 markerEntries
+    const oldEntries = markerEntries.splice(0, markerEntries.length)
+    const oldSnapshots: OldEntrySnapshot[] = []
+    for (const e of oldEntries) {
+      const p = projectLngLat(e.lng, e.lat)
+      if (p) oldSnapshots.push({ ...p, entry: e })
+    }
+
+    const newSnapshots: PixelPos[] = []
     if (data.clusters.length > 0) {
-      renderClusters(data.clusters)
+      renderClusters(data.clusters, oldSnapshots, newSnapshots)
     }
     if (data.points.length > 0) {
-      renderPoints(data.points)
+      renderPoints(data.points, oldSnapshots, newSnapshots)
+    }
+
+    // 没有新标记时直接 remove 旧标记，避免旧标记孤零零地原地缩小
+    if (newSnapshots.length === 0) {
+      oldEntries.forEach(e => e.marker.remove())
+    } else {
+      for (const snap of oldSnapshots) {
+        const dst = findNearestDelta(snap, newSnapshots, MOTION_MATCH_PX)
+        animateMarkerOutAndRemove(snap.entry, dst)
+      }
     }
   } catch (e) {
     if (seq !== fetchSeq) return
@@ -904,6 +1057,15 @@ onUnmounted(() => {
 /* ---- 标记锚点（MapLibre 直接控制此元素的 transform，不要在这里加 transition/transform） ---- */
 .marker-anchor {
   cursor: pointer;
+}
+
+/* ---- motion 包裹层：motion-v 的 animate() 独占这一层的 transform/opacity ----
+   不要在这层写 hover、transition，避免和 WAAPI 抢同一属性；hover 的视觉缩放放在内层。 */
+.marker-motion-wrapper {
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 50%;
+  will-change: transform, opacity;
 }
 
 /* ---- 聚合簇标记 ---- */
