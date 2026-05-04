@@ -78,19 +78,30 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { getMapAggregation, getClusterMedia } from '../api/map'
 import type { MapPointVO, MapClusterVO } from '../api/map'
 import { getSystemConfig } from '../api/systemConfig'
-import { gcj02ToWgs84 } from '../utils/coordTransform'
+import { gcj02ToWgs84, wgs84ToGcj02 } from '../utils/coordTransform'
 
 const router = useRouter()
+const route = useRoute()
 const mapContainer = ref<HTMLDivElement | null>(null)
 let map: maplibregl.Map | null = null
 const activeLayer = ref('protomaps-light')
 const customDomain = ref('albireo.shuumatu.com')
+
+/**
+ * 从「旅途回忆」卡片跳过来时，URL 带有 ?bboxMinLng&bboxMinLat&bboxMaxLng&bboxMaxLat&start&end，
+ * 老链接也兼容 ?lat&lng&start&end。
+ * 时间窗口必须等首次聚合返回 globalMinTime/globalMaxTime 后再映射成 rangeStart/rangeEnd，
+ * bbox 则在 onMounted 内用 fitBounds 一次性应用。
+ * pendingTimeRange 在首次应用后被清空，不影响后续用户操作。
+ */
+let pendingTimeRange: { start: number; end: number } | null = null
+let pendingBbox: [[number, number], [number, number]] | null = null
 
 type BaseLayer =
   | { id: 'osm' | 'satellite'; name: string; type: 'raster' }
@@ -288,6 +299,29 @@ function updateTimelineFromAggregation(data: {
     densityBuckets.value = bars
   }
   nextTick(drawDensity)
+
+  // 旅途回忆深链：第一次知道全局时间范围后，把 URL 中的 start/end 映射成 0~1 区间
+  if (pendingTimeRange) {
+    applyPendingTimeRange()
+  }
+}
+
+function applyPendingTimeRange() {
+  if (!pendingTimeRange) return
+  const span = globalMaxTime.value - globalMinTime.value
+  if (span <= 0) return
+
+  const s = clamp((pendingTimeRange.start - globalMinTime.value) / span, 0, 1)
+  const e = clamp((pendingTimeRange.end - globalMinTime.value) / span, 0, 1)
+
+  pendingTimeRange = null
+
+  if (e - s < MIN_RANGE) return
+
+  rangeStart.value = s
+  rangeEnd.value = e
+  // 时间窗口缩窄了，重新拉一次聚合数据
+  debouncedFetch()
 }
 
 let resizeObserver: ResizeObserver | null = null
@@ -327,6 +361,26 @@ function normalizeBounds(bounds: maplibregl.LngLatBounds) {
   }
 
   return { minLng: west, minLat: south, maxLng: east, maxLat: north }
+}
+
+/**
+ * 把 WGS84 视口 bbox 转成 GCJ02 最小外包矩形。
+ * 4 个角各自转换后取 min/max，处理跨国境视口时（境外角点恒等返回）矩形略微膨胀 ~0.006°，
+ * 安全地多框入少量境外 WGS84 点，不会漏。
+ */
+function bboxToGcj02(b: { minLng: number; minLat: number; maxLng: number; maxLat: number }) {
+  const corners: Array<[number, number]> = [
+    wgs84ToGcj02(b.minLng, b.minLat),
+    wgs84ToGcj02(b.minLng, b.maxLat),
+    wgs84ToGcj02(b.maxLng, b.minLat),
+    wgs84ToGcj02(b.maxLng, b.maxLat),
+  ]
+  return {
+    minLng: Math.min(corners[0][0], corners[1][0], corners[2][0], corners[3][0]),
+    minLat: Math.min(corners[0][1], corners[1][1], corners[2][1], corners[3][1]),
+    maxLng: Math.max(corners[0][0], corners[1][0], corners[2][0], corners[3][0]),
+    maxLat: Math.max(corners[0][1], corners[1][1], corners[2][1], corners[3][1]),
+  }
 }
 
 // --- 工具函数 ---
@@ -495,7 +549,11 @@ function renderPoints(points: MapPointVO[]) {
 async function fetchAggregation() {
   if (!map) return
   const seq = ++fetchSeq
-  const bounds = normalizeBounds(map.getBounds())
+  const wgsBounds = normalizeBounds(map.getBounds())
+  // 中国境内的国行设备 EXIF GPS 实际是 GCJ02，DB geom 数值也就是 GCJ02。
+  // 把视口 4 个角各自转成 GCJ02 后取最小外包矩形，再发给后端，避免 ~500m 系统性偏差导致的漏点 / 计数对不上。
+  // 4 角法可以兼顾横跨国境的视口（境外角点恒等返回 WGS84，矩形会略微膨胀 ~0.006°，最多多框入几个境外点，不会漏）。
+  const bounds = bboxToGcj02(wgsBounds)
   const zoom = Math.round(map.getZoom())
 
   try {
@@ -574,14 +632,28 @@ onMounted(async () => {
 
   const initialStyle = await loadVectorStyle('/map-styles/light.json')
 
+  // 解析「从旅途卡片跳过来」的 query 参数：bbox 优先，否则 lat/lng；time 暂存到 pendingTimeRange
+  const initialView = resolveInitialView()
+
   map = new maplibregl.Map({
     container: mapContainer.value!,
     style: initialStyle,
-    center: [116.4074, 39.9042],
-    zoom: 5
+    center: initialView.center,
+    zoom: initialView.zoom
   })
 
   map.on('load', () => {
+    // bbox 跳转：等地图 load 完用 fitBounds 让媒体范围居中。
+    // - padding 留出周围少量上下文，bottom 给时间轴让位避免遮挡；
+    // - maxZoom=13 限制小 bbox（如一次城市内旅游）的最高 zoom，避免放大到只看见几个街区。
+    if (pendingBbox && map) {
+      map.fitBounds(pendingBbox, {
+        padding: { top: 80, bottom: 160, left: 80, right: 80 },
+        duration: 0,
+        maxZoom: 13,
+      })
+      pendingBbox = null
+    }
     fetchAggregation()
   })
 
@@ -590,6 +662,64 @@ onMounted(async () => {
   resizeObserver = new ResizeObserver(drawDensity)
   if (trackRef.value) resizeObserver.observe(trackRef.value)
 })
+
+/**
+ * 根据 URL query 决定地图初始中心 / 缩放，并把 bbox / 时间范围暂存以备 load / 首次聚合后应用。
+ * 优先级：bbox > lat/lng > 默认（北京，zoom 5）。
+ */
+function resolveInitialView(): { center: [number, number]; zoom: number } {
+  const defaultView = { center: [116.4074, 39.9042] as [number, number], zoom: 5 }
+  let center = defaultView.center
+  let zoom = defaultView.zoom
+
+  // 1) bbox 模式（旅途卡片新链接）
+  const bbox = parseBboxQuery()
+  if (bbox) {
+    // 国行设备 EXIF GPS 实际是 GCJ02，DB geom 数值就是 GCJ02。
+    // 旅途接口的 bbox = ST_Extent(geom)，所以也是 GCJ02 数值。
+    // fitBounds 接收的是地图坐标（WGS84），需要把两个角点先转回 WGS84。
+    const [swLng, swLat] = gcj02ToWgs84(bbox[0][0], bbox[0][1])
+    const [neLng, neLat] = gcj02ToWgs84(bbox[1][0], bbox[1][1])
+    pendingBbox = [[swLng, swLat], [neLng, neLat]]
+    // 先把 center 设到 bbox 中心，避免地图初始化短暂闪过北京；fitBounds 在 load 后再精确收紧
+    center = [(swLng + neLng) / 2, (swLat + neLat) / 2]
+    zoom = 8
+  } else {
+    // 2) lat/lng 模式（向后兼容）
+    const lat = parseFloat(String(route.query.lat ?? ''))
+    const lng = parseFloat(String(route.query.lng ?? ''))
+    if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      const [wgsLng, wgsLat] = gcj02ToWgs84(lng, lat)
+      center = [wgsLng, wgsLat]
+      zoom = 11
+    }
+  }
+
+  // 3) 时间窗口：精确使用 trip 的 MIN/MAX shot_at，不再加 buffer，确保计数与卡片一致
+  const startRaw = route.query.start
+  const endRaw = route.query.end
+  if (typeof startRaw === 'string' && typeof endRaw === 'string') {
+    const startTs = new Date(startRaw).getTime()
+    const endTs = new Date(endRaw).getTime()
+    if (Number.isFinite(startTs) && Number.isFinite(endTs) && endTs > startTs) {
+      pendingTimeRange = { start: startTs, end: endTs }
+    }
+  }
+
+  return { center, zoom }
+}
+
+/** 解析 ?bboxMinLng&bboxMinLat&bboxMaxLng&bboxMaxLat → [[minLng,minLat],[maxLng,maxLat]] (GCJ02) */
+function parseBboxQuery(): [[number, number], [number, number]] | null {
+  const minLng = parseFloat(String(route.query.bboxMinLng ?? ''))
+  const minLat = parseFloat(String(route.query.bboxMinLat ?? ''))
+  const maxLng = parseFloat(String(route.query.bboxMaxLng ?? ''))
+  const maxLat = parseFloat(String(route.query.bboxMaxLat ?? ''))
+  if (![minLng, minLat, maxLng, maxLat].every(Number.isFinite)) return null
+  if (minLng >= maxLng || minLat >= maxLat) return null
+  if (minLng < -180 || maxLng > 180 || minLat < -90 || maxLat > 90) return null
+  return [[minLng, minLat], [maxLng, maxLat]]
+}
 
 onUnmounted(() => {
   if (debounceTimer) clearTimeout(debounceTimer)

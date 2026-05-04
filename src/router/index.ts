@@ -38,7 +38,8 @@ const routes = [
     {
         path: '/',
         name: 'Home',
-        component: MainPage
+        component: MainPage,
+        meta: { requiresAuth: false }
     },
     {
         path: '/map',

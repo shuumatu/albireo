@@ -1,64 +1,136 @@
 <template>
-  
-
-  <div
-    class="background-container"
-    ref="bgContainer"
-    @mousemove="handleMouseMove"
-    @mouseleave="stopMoving"
-  >
-    <!-- 背景图部分 -->
-    <div class="bg-images">
-      <img
-        v-for="(dot, index) in dots"
-        :key="dot.bg"
-        :src="dot.bg"
-        class="moving-bg"
-        :class="{ 'is-active': dot.bg === currentBg }"
-        loading="eager"
-        ref="bgImgRefs"
-      />
-    </div>
-
-    <!-- 左右箭头 -->
-    <img
-      class="arrow left-arrow"
-      :class="{ visible: showLeftArrow }"
-      src="../assets/icon/KeyboardArrowLeftTwotone.svg"
-      alt="←"
-    />
-    <img
-      class="arrow right-arrow"
-      :class="{ visible: showRightArrow }"
-      src="../assets/icon/KeyboardArrowRightTwotone.svg"
-      alt="→"
-    />
-
-    <!-- 底部圆点 -->
-    <div class="trigger-area" @mouseenter="showDots" @mouseleave="hideDots">
-      <div class="dots-container">
-        <div
+  <div class="main-page">
+    <!-- Hero 区域：保留原有背景轮播 -->
+    <div
+      class="hero-section background-container"
+      ref="bgContainer"
+      @mousemove="handleMouseMove"
+      @mouseleave="stopMoving"
+    >
+      <!-- 背景图部分 -->
+      <div class="bg-images">
+        <img
           v-for="(dot, index) in dots"
-          :key="index"
-          class="dot"
-          v-motion="`dot-${index}`"
-          @mouseenter="handleDotHover(index)"
-          @mouseleave="handleDotLeave(index)"
+          :key="dot.bg"
+          :src="dot.bg"
+          class="moving-bg"
+          :class="{ 'is-active': dot.bg === currentBg }"
+          loading="eager"
+          ref="bgImgRefs"
         />
       </div>
+
+      <!-- 左右箭头 -->
+      <img
+        class="arrow left-arrow"
+        :class="{ visible: showLeftArrow }"
+        src="../assets/icon/KeyboardArrowLeftTwotone.svg"
+        alt="←"
+      />
+      <img
+        class="arrow right-arrow"
+        :class="{ visible: showRightArrow }"
+        src="../assets/icon/KeyboardArrowRightTwotone.svg"
+        alt="→"
+      />
+
+      <!-- 底部圆点 -->
+      <div class="trigger-area" @mouseenter="showDots" @mouseleave="hideDots">
+        <div class="dots-container">
+          <div
+            v-for="(dot, index) in dots"
+            :key="index"
+            class="dot"
+            v-motion="`dot-${index}`"
+            @mouseenter="handleDotHover(index)"
+            @mouseleave="handleDotLeave(index)"
+          />
+        </div>
+      </div>
+
+      <!-- 滚动到推荐区指示器 -->
+      <button class="scroll-indicator" @click="scrollToRecommend" aria-label="向下浏览推荐内容">
+        <span class="indicator-text">探索作品</span>
+        <span class="indicator-arrow">↓</span>
+      </button>
+    </div>
+
+    <!-- 推荐区 -->
+    <div ref="recommendArea" class="recommend-area">
+      <RecommendSection
+        title="🔥 热门作品"
+        :subtitle="hotSubtitle"
+        :loading="hotLoading"
+        :error="hotError"
+        :has-items="hotItems.length > 0"
+        empty-text="暂无热门内容"
+        @retry="loadHot"
+      >
+        <MediaCard
+          v-for="item in hotItems"
+          :key="`hot-${item.itemType}-${item.id}`"
+          :item="item"
+        />
+      </RecommendSection>
+
+      <RecommendSection
+        title="✨ 编辑推荐"
+        subtitle="精心挑选的得意之作"
+        :loading="featuredLoading"
+        :error="featuredError"
+        :has-items="featuredItems.length > 0"
+        empty-text="暂无编辑推荐"
+        @retry="loadFeatured"
+      >
+        <MediaCard
+          v-for="item in featuredItems"
+          :key="`featured-${item.itemType}-${item.id}`"
+          :item="item"
+        />
+      </RecommendSection>
+
+      <RecommendSection
+        title="📍 旅途回忆"
+        subtitle="同一时间、同一地点拍下的回忆"
+        :loading="tripLoading"
+        :error="tripError"
+        :has-items="tripItems.length > 0"
+        empty-text="暂无足够带 GPS 信息的内容"
+        @retry="loadTrips"
+      >
+        <TripCard
+          v-for="trip in tripItems"
+          :key="`trip-${trip.tripId}`"
+          :trip="trip"
+        />
+      </RecommendSection>
+
+      <footer class="page-footer">
+        <span>© {{ new Date().getFullYear() }} shuumatu</span>
+      </footer>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useMotions } from '@vueuse/motion'
+import RecommendSection from '../components/RecommendSection.vue'
+import MediaCard from '../components/MediaCard.vue'
+import TripCard from '../components/TripCard.vue'
+import {
+  getHotRecommend,
+  getFeaturedRecommend,
+  getTripsRecommend,
+  type RecommendItemVO,
+  type TopicInfo,
+  type TripVO
+} from '../api/recommend'
 
+// ================== Hero 轮播逻辑（保持原有） ==================
 const bgImgRefs = ref<HTMLImageElement[]>([])
-
 const motions = useMotions()
 
-// 定义动画变体
 const variants = {
   hidden: {
     opacity: 0,
@@ -77,7 +149,7 @@ const variants = {
     backgroundColor: '#ffffff',
     transition: {
       duration: 350,
-      delay: (i) => i * 80,
+      delay: (i: number) => i * 80,
       ease: 'easeOut'
     }
   },
@@ -93,17 +165,15 @@ const variants = {
   }
 }
 
-// 应用初始状态
 onMounted(() => {
   dots.value.forEach((_, i) => {
     motions[`dot-${i}`].apply({
       ...variants.hidden,
-      x: i * 0// 改为20px，与CSS的gap保持一致
+      x: i * 0
     })
   })
 })
 
-// 显示圆点
 const showDots = () => {
   dots.value.forEach((_, i) => {
     motions[`dot-${i}`].apply({
@@ -116,23 +186,22 @@ const showDots = () => {
   })
 }
 
-// 隐藏圆点
 const hideDots = () => {
   dots.value.forEach((_, i) => {
     motions[`dot-${i}`].apply(variants.hidden)
   })
 }
 
-// 处理圆点悬停
 const handleDotHover = (index: number) => {
   motions[`dot-${index}`].apply(variants.hang)
   const pos = `${backgroundX}% center`
-  bgImgRefs.value.forEach(img => { img.style.objectPosition = pos })
+  bgImgRefs.value.forEach(img => {
+    img.style.objectPosition = pos
+  })
   activeIndex = index
   currentBg.value = dots.value[index].bg
 }
 
-// 处理圆点离开
 const handleDotLeave = (index: number) => {
   motions[`dot-${index}`].apply({
     ...variants.visible,
@@ -148,13 +217,12 @@ const dots = ref([
   { bg: new URL('../assets/bg2.jpg', import.meta.url).href },
   { bg: new URL('../assets/bg3.jpg', import.meta.url).href },
   { bg: new URL('../assets/bg4.jpg', import.meta.url).href },
-  { bg: new URL('../assets/bg5.jpg', import.meta.url).href },
+  { bg: new URL('../assets/bg5.jpg', import.meta.url).href }
 ])
 
 const defaultBg = new URL('../assets/bg4.jpg', import.meta.url).href
 const currentBg = ref(defaultBg)
 
-// 强制提前解码所有图片，避免首次显示时主线程阻塞
 onMounted(() => {
   bgImgRefs.value.forEach(img => {
     img.decode().catch(() => {})
@@ -236,14 +304,100 @@ onBeforeUnmount(() => {
   if (animationFrameId !== null) cancelAnimationFrame(animationFrameId)
   resizeObserver?.disconnect()
 })
+
+// ================== 推荐数据加载 ==================
+const RECOMMEND_LIMIT = 12
+
+const hotItems = ref<RecommendItemVO[]>([])
+const hotTopic = ref<TopicInfo | null>(null)
+const hotLoading = ref(true)
+const hotError = ref<string | null>(null)
+
+const featuredItems = ref<RecommendItemVO[]>([])
+const featuredLoading = ref(true)
+const featuredError = ref<string | null>(null)
+
+const TRIP_LIMIT = 6
+const tripItems = ref<TripVO[]>([])
+const tripLoading = ref(true)
+const tripError = ref<string | null>(null)
+
+const hotSubtitle = computed(() => {
+  if (hotTopic.value && hotTopic.value.tagName) {
+    return `本月主题 · #${hotTopic.value.tagName}`
+  }
+  return '近期最受欢迎的图片与视频'
+})
+
+async function loadHot() {
+  hotLoading.value = true
+  hotError.value = null
+  try {
+    const result = await getHotRecommend(RECOMMEND_LIMIT)
+    hotItems.value = result.items || []
+    hotTopic.value = result.currentTopic
+  } catch (e: any) {
+    hotError.value = e?.message || '加载失败'
+  } finally {
+    hotLoading.value = false
+  }
+}
+
+async function loadFeatured() {
+  featuredLoading.value = true
+  featuredError.value = null
+  try {
+    featuredItems.value = await getFeaturedRecommend(RECOMMEND_LIMIT)
+  } catch (e: any) {
+    featuredError.value = e?.message || '加载失败'
+  } finally {
+    featuredLoading.value = false
+  }
+}
+
+async function loadTrips() {
+  tripLoading.value = true
+  tripError.value = null
+  try {
+    tripItems.value = await getTripsRecommend(TRIP_LIMIT)
+  } catch (e: any) {
+    tripError.value = e?.message || '加载失败'
+  } finally {
+    tripLoading.value = false
+  }
+}
+
+onMounted(() => {
+  // 并发拉取，让 3 个推荐区同时开始加载
+  loadHot()
+  loadFeatured()
+  loadTrips()
+})
+
+// ================== 滚动到推荐区 ==================
+const recommendArea = ref<HTMLElement | null>(null)
+
+function scrollToRecommend() {
+  const el = recommendArea.value
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 </script>
 
 <style scoped>
-.background-container {
+.main-page {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Hero 区域：占满首屏 */
+.hero-section {
+  position: relative;
   width: 100%;
   height: calc(100vh - 64px);
   overflow: hidden;
-  position: relative;
+  flex-shrink: 0;
 }
 
 .bg-images {
@@ -298,13 +452,13 @@ onBeforeUnmount(() => {
 }
 
 .trigger-area {
-  position: fixed;
+  position: absolute;
   bottom: 0;
   left: 50%;
   transform: translateX(-50%);
   width: min(90%, 500px);
   height: 175px;
-  z-index: 1000;
+  z-index: 10;
 }
 
 .dots-container {
@@ -325,7 +479,70 @@ onBeforeUnmount(() => {
   transition: background-color 0.3s ease;
 }
 
-</style>
+/* 滚动指示器 */
+.scroll-indicator {
+  position: absolute;
+  bottom: 20px;
+  right: 24px;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  background-color: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 22px;
+  color: white;
+  font-size: 12px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: background-color 0.25s ease, transform 0.25s ease;
+}
 
-<!-- CSS中间距是圆点中心到另一个中心的距离
-vmotion中的距离设置的距离是在css基础上继续偏移 -->
+.scroll-indicator:hover {
+  background-color: rgba(0, 0, 0, 0.55);
+  transform: translateY(-2px);
+}
+
+.indicator-arrow {
+  font-size: 14px;
+  animation: bounce 2s ease-in-out infinite;
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translateY(4px);
+    opacity: 1;
+  }
+}
+
+/* 推荐区 */
+.recommend-area {
+  width: 100%;
+  background-color: #0a0a0a;
+  padding: 24px 0 12px;
+}
+
+.page-footer {
+  padding: 32px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+
+@media (max-width: 768px) {
+  .scroll-indicator {
+    bottom: 16px;
+    right: 16px;
+    padding: 6px 12px;
+    font-size: 11px;
+  }
+}
+</style>
