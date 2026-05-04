@@ -303,8 +303,58 @@ function updateTimelineFromAggregation(data: {
   timeHistogram?: { index: number; start: string; count: number }[];
 }) {
   if (data.minTime && data.maxTime) {
-    globalMinTime.value = new Date(data.minTime).getTime()
-    globalMaxTime.value = new Date(data.maxTime).getTime()
+    const newMin = new Date(data.minTime).getTime()
+    const newMax = new Date(data.maxTime).getTime()
+
+    // 后端 getTimeRangeInBounds 只看 bbox，视口变化会导致 globalMinTime/globalMaxTime 浮动。
+    // rangeStart/rangeEnd 是相对比例，如果让比例不动、直接替换 global 端点，
+    // 用户选择的绝对时间窗口会跟着漂移（筛选条贴在两端时最明显）。
+    //
+    // 这里采用「贴边感知 + 绝对时间锚点」混合策略：
+    //  - rangeStart=0（贴左）→ 保持贴左，表达「从最老开始」；
+    //  - rangeEnd=1 （贴右）→ 保持贴右，表达「到最新为止」；
+    //  - 两端非贴边 → 保持绝对时间不变，只重新映射比例；
+    //  - pendingTimeRange 存在时跳过，避免和 applyPendingTimeRange 打架；
+    //  - dragMode 非空时跳过：拖动过程中 dragOriginStart/End 以旧比例为基，
+    //    中途改 rangeStart/rangeEnd 会让筛选条在指针下跳一下。
+    const oldSpan = globalMaxTime.value - globalMinTime.value
+    const newSpan = newMax - newMin
+    const shouldRemap =
+      !pendingTimeRange && oldSpan > 0 && newSpan > 0 && dragMode === null
+
+    const anchorLeft = rangeStart.value <= 0
+    const anchorRight = rangeEnd.value >= 1
+    const prevStart = shouldRemap ? selectedStartTime.value : 0
+    const prevEnd = shouldRemap ? selectedEndTime.value : 0
+
+    globalMinTime.value = newMin
+    globalMaxTime.value = newMax
+
+    if (shouldRemap && !(anchorLeft && anchorRight)) {
+      let newS = anchorLeft ? 0 : (prevStart - newMin) / newSpan
+      let newE = anchorRight ? 1 : (prevEnd - newMin) / newSpan
+      newS = clamp(newS, 0, 1)
+      newE = clamp(newE, 0, 1)
+
+      // 原窗口被 clamp 压扁（说明原绝对时间整个落在新 global 同一侧之外）。
+      // 不退回全范围，而是在原本所在的那一侧保留一个 MIN_RANGE 的占位窗口，
+      // 让用户看到「筛选没丢，只是这个视口没有那段时间的数据」。
+      // 决定贴到哪一端：锚点信息优先，否则看压扁前（raw）落在哪一侧。
+      if (newE - newS < MIN_RANGE) {
+        const stickRight =
+          anchorRight ||
+          (!anchorLeft && prevStart > newMax)
+        if (stickRight) {
+          newE = 1
+          newS = 1 - MIN_RANGE
+        } else {
+          newS = 0
+          newE = MIN_RANGE
+        }
+      }
+      rangeStart.value = newS
+      rangeEnd.value = newE
+    }
   }
   if (data.timeHistogram) {
     const count = data.bucketCount ?? data.timeHistogram.length
