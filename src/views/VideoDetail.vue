@@ -34,6 +34,11 @@
       <p class="vd-desc">{{ videoData.description }}</p>
     </div>
 
+    <!-- 视觉相似推荐：基于本视频封面 embedding 的 ANN -->
+    <div class="vd-similar">
+      <SimilarStrip type="video" :uuid="uuid as string" />
+    </div>
+
     <!-- Comments Section -->
     <div class="vd-comments">
       <CommentSection target-type="video" :target-id="uuid as string" />
@@ -46,6 +51,7 @@ import { onMounted, ref } from 'vue'
 import { NSpin } from 'naive-ui'
 import VideoPlayer from '../components/VideoPlayer.vue'
 import CommentSection from '../components/CommentSection.vue'
+import SimilarStrip from '../components/SimilarStrip.vue'
 import type { VideoSource } from '../types/video'
 import { useRoute } from 'vue-router'
 import { getVideoInfo } from '../api/video'
@@ -131,6 +137,7 @@ onMounted(() => { fetchVideoInfo() })
 /* 内容区居中限宽 */
 .vd-player-wrap,
 .vd-meta,
+.vd-similar,
 .vd-comments {
   width: calc(100% - 48px);
   max-width: 900px;
@@ -139,6 +146,7 @@ onMounted(() => { fetchVideoInfo() })
 
 .vd-player-wrap { margin-bottom: 20px; }
 .vd-meta { margin-bottom: 16px; }
+.vd-similar { margin-bottom: 16px; }
 
 /* Player */
 .vd-player-wrap :deep(.vd-player-inner),
@@ -207,6 +215,28 @@ onMounted(() => { fetchVideoInfo() })
   color: #5F7A6A;
   line-height: 1.5;
   margin: 0;
+}
+
+/* 视觉相似 */
+.vd-similar {
+  background: #FFFFFF;
+  border-radius: 12px;
+  padding: 4px 4px 8px;
+  border: 1px solid #B8D9C4;
+  box-shadow: 0 2px 8px rgba(76, 175, 125, 0.08);
+  overflow: hidden;
+}
+
+/* 视频页是浅色主题，覆盖 RecommendSection 默认的深色文字 */
+.vd-similar :deep(.section-title) { color: #2E7D52; }
+.vd-similar :deep(.section-subtitle) { color: #5F7A6A; }
+.vd-similar :deep(.scroll-btn) {
+  border-color: #B8D9C4;
+  background-color: #E8F5EE;
+  color: #2E7D52;
+}
+.vd-similar :deep(.scroll-btn:hover:not(:disabled)) {
+  background-color: #D7ECDF;
 }
 
 /* Comments */

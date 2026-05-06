@@ -10,6 +10,22 @@
       </router-link>
     </div>
 
+    <!-- 中间搜索框（中文自然语言 → 视觉相似搜索）-->
+    <div class="search-wrapper">
+      <n-input
+        v-model:value="searchQuery"
+        placeholder="搜一下，例如：海边日落 / 雪山日出"
+        clearable
+        round
+        class="search-input"
+        @keydown.enter="goSearch"
+      >
+        <template #prefix>
+          <span class="search-icon">🔍</span>
+        </template>
+      </n-input>
+    </div>
+
     <!-- 右侧区域 -->
     <div class="right-section">
       <div class="menu-wrapper">
@@ -41,10 +57,23 @@ import { useRoute, useRouter } from 'vue-router'
 const route = useRoute()
 const router = useRouter()
 const activeKey = ref(route.path)
+const searchQuery = ref('')
 
 watch(route, () => {
   activeKey.value = route.path
+  // 离开搜索页时清空输入框，回到搜索页时回填 query
+  if (route.name === 'Search' && typeof route.query.q === 'string') {
+    searchQuery.value = route.query.q
+  } else if (route.name !== 'Search') {
+    searchQuery.value = ''
+  }
 })
+
+function goSearch() {
+  const q = searchQuery.value.trim()
+  if (!q) return
+  router.push({ name: 'Search', query: { q } })
+}
 
 const username = computed(() => localStorage.getItem('username') || '')
 
@@ -158,5 +187,32 @@ function handleUserMenuSelect(key) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 中间搜索框 */
+.search-wrapper {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  padding: 0 24px;
+  max-width: 600px;
+}
+
+.search-input {
+  --n-color: rgba(255, 255, 255, 0.08);
+  --n-color-focus: rgba(255, 255, 255, 0.15);
+  --n-text-color: white;
+  --n-placeholder-color: rgba(255, 255, 255, 0.5);
+  --n-border: 1px solid rgba(255, 255, 255, 0.15);
+  --n-border-focus: 1px solid rgba(255, 255, 255, 0.4);
+  --n-box-shadow-focus: none;
+  width: 100%;
+  max-width: 480px;
+}
+
+.search-icon {
+  font-size: 14px;
+  opacity: 0.6;
+  margin-right: 4px;
 }
 </style>

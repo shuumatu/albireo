@@ -50,6 +50,12 @@ const routes = [
         path: '/timeline',
         name: 'Timeline',
         component: TimeLine
+    },
+    {
+        path: '/search',
+        name: 'Search',
+        component: () => import('../views/Search.vue'),
+        meta: { requiresAuth: false }
     }
 ]
 

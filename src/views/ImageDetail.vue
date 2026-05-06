@@ -147,6 +147,11 @@
           </div>
         </div>
 
+        <!-- 视觉相似推荐：基于本图自身 embedding 的 ANN -->
+        <div class="similar-wrapper">
+          <SimilarStrip type="image" :uuid="uuid as string" />
+        </div>
+
         <!-- 评论区域 -->
         <div class="comment-wrapper">
           <CommentSection target-type="image" :target-id="uuid as string" />
@@ -182,6 +187,7 @@ import { motion } from 'motion-v'
 import { useRoute, useRouter } from 'vue-router'
 import { getImageInfo } from '../api/image'
 import CommentSection from '../components/CommentSection.vue'
+import SimilarStrip from '../components/SimilarStrip.vue'
 import type { ImageInfoVO } from '../api/image'
 import { getSystemConfig } from '../api/systemConfig'
 import dayjs from 'dayjs'
@@ -691,6 +697,18 @@ onUnmounted(() => {
 .mv-processing { color: #fbbf24; }
 .mv-uploading { color: #60a5fa; }
 .mv-failed { color: #f87171; }
+
+/* ===== 视觉相似 ===== */
+.similar-wrapper {
+  margin-top: 20px;
+  padding: 12px 4px 4px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  overflow: hidden;
+}
 
 /* ===== 评论区 ===== */
 .comment-wrapper {
