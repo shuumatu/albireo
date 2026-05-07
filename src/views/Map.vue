@@ -883,7 +883,8 @@ function handleZoomIn() { map?.zoomIn() }
 function handleZoomOut() { map?.zoomOut() }
 function handleHome() {
   if (!map) return
-  map.flyTo({ center: [116.4074, 39.9042], zoom: 5, duration: 800 })
+  // 默认中心广州（广东省会，WGS-84），与初始视图一致
+  map.flyTo({ center: [113.2644, 23.1291], zoom: 5, duration: 800 })
 }
 
 async function toggleFullscreen() {
@@ -1064,7 +1065,9 @@ onMounted(async () => {
 })
 
 function resolveInitialView(): { center: [number, number]; zoom: number } {
-  const defaultView = { center: [116.4074, 39.9042] as [number, number], zoom: 5 }
+  // 默认中心广州（WGS-84，[lng, lat]）。无 ?bbox / ?lat&lng 等首屏参数时落在广东，
+  // 与 handleHome / 管理后台 LocationPicker 默认中心保持一致。
+  const defaultView = { center: [113.2644, 23.1291] as [number, number], zoom: 5 }
   let center = defaultView.center
   let zoom = defaultView.zoom
 
