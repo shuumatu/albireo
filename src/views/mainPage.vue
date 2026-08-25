@@ -58,7 +58,7 @@
     <!-- 推荐区 -->
     <div ref="recommendArea" class="recommend-area">
       <RecommendSection
-        title="🔥 热门作品"
+        title="热门作品"
         :subtitle="hotSubtitle"
         :loading="hotLoading"
         :error="hotError"
@@ -74,12 +74,12 @@
       </RecommendSection>
 
       <RecommendSection
-        title="✨ 编辑推荐"
+        title="推荐作品"
         subtitle="精心挑选的得意之作"
         :loading="featuredLoading"
         :error="featuredError"
         :has-items="featuredItems.length > 0"
-        empty-text="暂无编辑推荐"
+        empty-text="暂无推荐作品"
         @retry="loadFeatured"
       >
         <MediaCard
@@ -90,7 +90,7 @@
       </RecommendSection>
 
       <RecommendSection
-        title="📍 旅途回忆"
+        title="旅途回忆"
         subtitle="同一时间、同一地点拍下的回忆"
         :loading="tripLoading"
         :error="tripError"

@@ -328,13 +328,18 @@ const handleReady = () => {
       insertIndex = controlBar.children().length
     }
     
-    const qualityButton = controlBar.addChild('QualityMenuButton', {}, insertIndex)
-    
-    setTimeout(() => {
-      qualityButton.updateButtonText()
-    }, 0)
-    
-    console.log('清晰度按钮已添加到控制栏')
+    // 只有一档时清晰度菜单是个空操作，直接不渲染按钮——避免控制栏出现
+    // 永远只能选自己的"清晰度"按钮，看起来像 bug
+    let qualityButton: any = null
+    if (sources.value.length > 1) {
+      qualityButton = controlBar.addChild('QualityMenuButton', {}, insertIndex)
+      setTimeout(() => {
+        qualityButton.updateButtonText()
+      }, 0)
+      console.log('清晰度按钮已添加到控制栏')
+    } else {
+      console.log('仅一档清晰度，跳过清晰度按钮')
+    }
     
     // 移除 Video.js 控件聚焦问题并设置鼠标事件
     const playerEl = player.value.el()

@@ -95,12 +95,31 @@ async function fetchVideoInfo() {
     const originalUrl = `${domain}/${normalizedObjectKey}`
     const basePath = originalUrl.replace(/\/original\/[^/]*$/, '')
 
-    videoSources.value = [
+    // 原画始终存在（上传完就有，不依赖转码）；转码档按后端 video_versions 实际登记
+    // 的 'done' 行筛选——避免播放器列出 R2 上根本不存在的清晰度而 404。
+    const sources: VideoSource[] = [
       { src: originalUrl, label: '原画', type: 'video/mp4' },
-      { src: `${basePath}/1080p/1080p.mp4`, label: '1080P', type: 'video/mp4' },
-      { src: `${basePath}/720p/720p.mp4`, label: '720P', type: 'video/mp4' },
-      { src: `${basePath}/480p/480p.mp4`, label: '480P', type: 'video/mp4' },
     ]
+    const QUALITY_DISPLAY: Array<{ resolution: string; label: string }> = [
+      { resolution: '1080p', label: '1080P' },
+      { resolution: '720p', label: '720P' },
+      { resolution: '480p', label: '480P' },
+    ]
+    const doneResolutions = new Set(
+      (videoResponse.videoVersions ?? [])
+        .filter(v => v.status === 'done')
+        .map(v => v.resolution)
+    )
+    for (const q of QUALITY_DISPLAY) {
+      if (doneResolutions.has(q.resolution)) {
+        sources.push({
+          src: `${basePath}/${q.resolution}/${q.resolution}.mp4`,
+          label: q.label,
+          type: 'video/mp4',
+        })
+      }
+    }
+    videoSources.value = sources
 
     if (videoResponse.coverUrl) {
       const coverUrl = videoResponse.coverUrl.startsWith('http')
