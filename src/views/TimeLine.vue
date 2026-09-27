@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { getTimelineStatistics, getTimelineBucket, type TimelineStatistics, type TimelineBucket, type BucketPhoto, type MonthlyCount } from '../api/timeline'
+import { getTimelineStatistics, getTimelineBucket, type TimelineStatistics, type TimelineBucket, type BucketPhoto } from '../api/timeline'
 import { getSystemConfig } from '../api/systemConfig'
 
 interface Photo {

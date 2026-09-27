@@ -55,13 +55,20 @@
       </div>
     </div>
   </n-card>
+  <n-modal v-model:show="previewOpen" preset="card" :title="getItemTitle(selectedItem)" style="width: 90vw; max-width: 1100px;">
+    <template v-if="selectedItem">
+      <VideoShareContent v-if="collectionType === 'video'" :content="selectedItem" />
+      <ImageShareContent v-else :content="selectedItem" />
+    </template>
+  </n-modal>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref } from 'vue'
+import ImageShareContent from './ImageShareContent.vue'
+import VideoShareContent from './VideoShareContent.vue'
 import {
-  NCard, NSpace, NFlex, NH3, NText, NTag, NDivider, NEmpty
+  NCard, NSpace, NFlex, NH3, NText, NTag, NDivider, NEmpty, NModal
 } from 'naive-ui'
 
 /**
@@ -76,7 +83,8 @@ const props = defineProps<{
   content: any
 }>()
 
-const router = useRouter()
+const selectedItem = ref<any>(null)
+const previewOpen = ref(false)
 
 const collection = computed(() => {
   return props.content?.collection ?? props.content
@@ -128,20 +136,10 @@ function onImgError(e: Event) {
   }
 }
 
-/**
- * 点击合集子项 → 跳转到对应的视频 / 图片详情页。
- *
- * 注意：详情页通常需要登录访问，匿名分享访客点击会被路由守卫推到 Login，
- * 登录后通过 redirect query 回跳到目标详情页。这是产品决策——分享页本身
- * 已经能播放/查看完整内容，详情页提供更丰富的元数据 / 交互。
- */
+// Preview only content already returned by the authorized share request.
 function openItem(item: any) {
-  if (!item?.uuid) return
-  if (collectionType.value === 'video') {
-    router.push(`/video/${item.uuid}`)
-  } else {
-    router.push(`/image/${item.uuid}`)
-  }
+  selectedItem.value = item
+  previewOpen.value = true
 }
 
 function formatDate(dateStr: string) {

@@ -28,12 +28,14 @@ const routes = [
     {
         path: '/video/:uuid',
         name: 'VideoPlayer',
-        component: VideoDetail
+        component: VideoDetail,
+        meta: { requiresAuth: false }
     },
     {
         path: '/image/:uuid',
         name: 'ImageDetail',
-        component: ImageDetail
+        component: ImageDetail,
+        meta: { requiresAuth: false }
     },
     {
         path: '/',
@@ -44,12 +46,14 @@ const routes = [
     {
         path: '/map',
         name: 'Map',
-        component: Map
+        component: Map,
+        meta: { requiresAuth: false }
     },
     {
         path: '/timeline',
         name: 'Timeline',
-        component: TimeLine
+        component: TimeLine,
+        meta: { requiresAuth: false }
     },
     {
         path: '/search',

@@ -10,7 +10,7 @@
       <!-- 背景图部分 -->
       <div class="bg-images">
         <img
-          v-for="(dot, index) in dots"
+          v-for="dot in dots"
           :key="dot.bg"
           :src="dot.bg"
           class="moving-bg"
@@ -38,7 +38,7 @@
       <div class="trigger-area" @mouseenter="showDots" @mouseleave="hideDots">
         <div class="dots-container">
           <div
-            v-for="(dot, index) in dots"
+            v-for="(_dot, index) in dots"
             :key="index"
             class="dot"
             v-motion="`dot-${index}`"
