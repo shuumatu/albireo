@@ -20,6 +20,9 @@ interface SystemConfigVO {
  * @param key 配置键名
  */
 export function getSystemConfig(category: string, key: string): Promise<SystemConfigVO> {
+  if (category === 'storage' && key === 'custom_domain') {
+    return request.get('/api/metadata/system-config/public/storage-domain');
+  }
   return request.get(`/api/metadata/system-config/${category}/${key}`);
 }
 

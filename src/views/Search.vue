@@ -39,6 +39,9 @@
     </div>
 
     <!-- 结果区 -->
+    <n-alert v-if="degraded && !loading && !error" type="warning" :show-icon="false" style="margin-bottom: 16px">
+      视觉搜索暂时繁忙或不可用，目前显示标题与描述的关键词匹配结果。
+    </n-alert>
     <div class="result-area">
       <!-- 加载中骨架 -->
       <div v-if="loading" class="grid">
@@ -63,7 +66,7 @@
       <!-- 空态：搜过但无结果 -->
       <div v-else-if="results.length === 0" class="empty-state">
         <p class="hint-title">没找到与「{{ lastQuery }}」相关的内容</p>
-        <p class="hint-sub">试试换个说法、降低相关度阈值，或者等历史回填完成</p>
+        <p class="hint-sub">试试其他关键词，或切换图片、视频筛选。</p>
       </div>
 
       <!-- 结果网格 -->
@@ -83,9 +86,9 @@
           <span
             class="score-badge"
             :class="scoreBadgeClass(item.score)"
-            :title="`cosine 相似度 ${item.score.toFixed(3)}（CLIP 文本-图像通常在 0.1~0.4）`"
+            :title="item.matchType === 'keyword' ? '标题或描述命中关键词' : `视觉相似度 ${item.score.toFixed(3)}`"
           >
-            {{ Math.round(item.score * 100) }}%
+            {{ item.matchType === 'keyword' ? '关键词' : Math.round(item.score * 100) + '%' }}
           </span>
         </div>
       </div>
@@ -106,6 +109,7 @@ const localQuery = ref<string>(typeof route.query.q === 'string' ? route.query.q
 const lastQuery = ref<string>('')
 const loading = ref(false)
 const error = ref<string | null>(null)
+const degraded = ref(false)
 const results = ref<SearchItemVO[]>([])
 const typeFilter = ref<'all' | 'image' | 'video'>('all')
 
@@ -120,7 +124,9 @@ async function runSearch(query: string) {
   try {
     const types =
       typeFilter.value === 'all' ? undefined : [typeFilter.value as 'image' | 'video']
-    results.value = await searchByText({ query, types, limit: 60 })
+    const response = await searchByText({ query, types, limit: 60 })
+    results.value = response.items
+    degraded.value = response.mode === 'keyword_fallback'
     lastQuery.value = query
   } catch (e: any) {
     console.error('search failed', e)
@@ -286,5 +292,17 @@ onMounted(() => {
 .hint-sub {
   font-size: 14px;
   color: rgba(255, 255, 255, 0.5);
+}
+
+@media (max-width: 640px) {
+  .search-page {
+    padding: 24px 16px 48px;
+  }
+
+  .filter-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
 }
 </style>

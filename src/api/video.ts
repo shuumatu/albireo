@@ -1,15 +1,17 @@
 import request from "../utils/request";
 
-/** 单个转码档位的元数据。url 由前端自行按 hash + resolution 拼接，与 worker 命名一致。 */
+/** 已登记版本的授权播放地址。 */
 export interface VideoVersion {
   /** 例如 "1080p" / "720p" / "480p" */
   resolution: string;
+  url?: string | null;
   /** "done" 表示该档已生成可播放 mp4；其它视为不可用 */
   status: string;
 }
 
 interface videoData {
   objectKey: string;
+  sourceUrl?: string | null;
   title: string;
   description: string;
   coverUrl: string;

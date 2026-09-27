@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { getTimelineStatistics, getTimelineBucket, type TimelineStatistics, type TimelineBucket, type BucketPhoto, type MonthlyCount } from '../api/timeline'
-import { getSystemConfig } from '../api/systemConfig'
+import { getTimelineStatistics, getTimelineBucket, type TimelineStatistics, type TimelineBucket, type BucketPhoto } from '../api/timeline'
 
 interface Photo {
   id: string
@@ -65,15 +63,9 @@ const monthlyDistribution = ref<Map<string, number>>(new Map()) // key: "year-mo
 const loadedBuckets = ref<Map<string, TimelineBucket>>(new Map())
 const isInitializing = ref(true)
 const loadingError = ref<string>('')
-const customDomain = ref<string>('albireo.shuumatu.com') // 默认域名
-const router = useRouter()
-
-const openMediaDetail = (photo: Photo) => {
+const mediaDetailRoute = (photo: Photo) => {
   const isVideo = photo.mediaType && (photo.mediaType.startsWith('video/') || photo.mediaType === 'video')
-  const route = isVideo
-    ? router.resolve({ name: 'VideoPlayer', params: { uuid: photo.id } })
-    : router.resolve({ name: 'ImageDetail', params: { uuid: photo.id } })
-  window.open(route.href, '_blank')
+  return { name: isVideo ? 'VideoPlayer' : 'ImageDetail', params: { uuid: photo.id } }
 }
 
 // 常量
@@ -101,28 +93,6 @@ const formatDateTitle = (year: number, month: number, day: number): string => {
   return `${month}月${day}日 周${weekday}`
 }
 
-// 处理图片 URL
-const processImageUrl = (url: string, mediaType: string): string => {
-  if (mediaType && (mediaType.startsWith('video/') || mediaType === 'video')) {
-    return ''
-  }
-  const rawPattern = /\/raw\/[^/]+$/
-  if (rawPattern.test(url)) {
-    return url.replace(rawPattern, '/medium/medium.jpg')
-  }
-  return url
-}
-
-// 处理视频 URL：将 /original/文件名 替换为 /thumbnails/thumbnail.jpg
-const processVideoUrl = (url: string): string => {
-  // 匹配 /original/文件名 的模式（文件名可能包含空格等特殊字符）
-  const originalPattern = /\/original\/[^/]*$/
-  if (originalPattern.test(url)) {
-    return url.replace(originalPattern, '/thumbnails/thumbnail.jpg')
-  }
-  return url
-}
-
 // 计算图片显示宽度
 const calculatePhotoWidth = (photo: Photo): number => {
   const FIXED_HEIGHT = 200
@@ -145,56 +115,7 @@ const handleImageLoad = (event: Event, photo: Photo) => {
   }
 }
 
-const getDisplayUrl = (photo: BucketPhoto): string => {
-  const isVideo = photo.mediaType && (photo.mediaType.startsWith('video/') || photo.mediaType === 'video')
-  
-  if (isVideo) {
-    // 视频：使用 objectKey 生成缩略图 URL
-    // 优先使用 coverUrl（如果存在且是完整 URL）
-    if (photo.coverUrl && photo.coverUrl.startsWith('http')) {
-      return photo.coverUrl
-    }
-    
-    // 使用 objectKey 处理视频缩略图
-    const raw = photo.objectKey || ''
-    const processedUrl = processVideoUrl(raw)
-    
-    // 如果已经是完整 URL，直接返回
-    if (processedUrl.startsWith('http')) {
-      return processedUrl
-    }
-    
-    // 如果 coverUrl 存在但不是完整 URL，使用 coverUrl
-    if (photo.coverUrl) {
-      const domain = customDomain.value.startsWith('http') ? customDomain.value : `https://${customDomain.value}`
-      const normalizedCoverUrl = photo.coverUrl.startsWith('/') ? photo.coverUrl.slice(1) : photo.coverUrl
-      return `${domain}/${normalizedCoverUrl}`
-    }
-    
-    // 使用处理后的 objectKey 拼接域名
-    if (processedUrl) {
-      const domain = customDomain.value.startsWith('http') ? customDomain.value : `https://${customDomain.value}`
-      const normalizedUrl = processedUrl.startsWith('/') ? processedUrl.slice(1) : processedUrl
-      return `${domain}/${normalizedUrl}`
-    }
-    
-    return ''
-  } else {
-    // 图片：使用 objectKey 处理并拼接域名
-    const raw = photo.objectKey
-    const processedUrl = processImageUrl(raw, photo.mediaType) || raw
-    
-    // 如果已经是完整 URL，直接返回
-    if (processedUrl.startsWith('http')) {
-      return processedUrl
-    }
-    
-    // 拼接域名
-    const domain = customDomain.value.startsWith('http') ? customDomain.value : `https://${customDomain.value}`
-    const normalizedUrl = processedUrl.startsWith('/') ? processedUrl.slice(1) : processedUrl
-    return `${domain}/${normalizedUrl}`
-  }
-}
+const getDisplayUrl = (photo: BucketPhoto): string => photo.coverUrl || ''
 
 // 根据后端返回的月份分布生成占位组
 const generateMonthPlaceholders = (): TimeGroup[] => {
@@ -417,19 +338,8 @@ const initializeTimeline = async () => {
     isInitializing.value = true
     loadingError.value = ''
     
-    // 并行获取统计数据和自定义域名配置
-    const [stats, domainConfig] = await Promise.all([
-      getTimelineStatistics(),
-      getSystemConfig('storage', 'custom_domain').catch(() => null)
-    ])
-    
-    statistics.value = stats
-    
-    // 更新自定义域名
-    if (domainConfig?.value) {
-      customDomain.value = domainConfig.value
-    }
-    
+    statistics.value = await getTimelineStatistics()
+
     // 触发重新计算
     segmentsKey.value++
     
@@ -726,6 +636,10 @@ watch(windowHeight, () => {
       <button @click="initializeTimeline" class="retry-button">重试</button>
     </div>
 
+    <div v-if="!isInitializing && !loadingError && statistics?.totalCount === 0" class="empty-state">
+      暂无公开作品，稍后再来看看。
+    </div>
+
     <!-- 主内容区 -->
     <div ref="mainContent" class="main-content">
       <div class="photo-flow-container">
@@ -747,16 +661,17 @@ watch(windowHeight, () => {
           
           <!-- 图片网格或占位符 -->
           <div v-if="group.isLoaded" class="photo-grid">
-            <div
+            <router-link
               v-for="photo in group.photos"
               :key="photo.id"
               class="photo-item"
               :class="{ 'is-video': photo.mediaType === 'video' || photo.mediaType?.startsWith('video/') }"
+              :to="mediaDetailRoute(photo)"
+              :aria-label="`查看${photo.mediaType === 'video' || photo.mediaType?.startsWith('video/') ? '视频' : '图片'}详情`"
               :style="{ 
                 width: calculatePhotoWidth(photo) + 'px', 
                 height: '200px'
               }"
-              @click="openMediaDetail(photo)"
             >
               <img 
                 :src="photo.url" 
@@ -771,7 +686,7 @@ watch(windowHeight, () => {
                   <path d="M10 8L16 12L10 16V8Z" fill="white"/>
                 </svg>
               </div>
-            </div>
+            </router-link>
           </div>
           
           <!-- 占位符（基于预估数量） -->
@@ -797,6 +712,7 @@ watch(windowHeight, () => {
 
     <!-- 时间轴滚动条 -->
     <div
+      v-if="timeGroups.length > 0"
       ref="scrollBar"
       class="scrubber"
       :class="{ 'is-dragging': isDragging }"
@@ -851,6 +767,19 @@ watch(windowHeight, () => {
   background: #000;
   position: relative;
   overflow: hidden;
+}
+
+.empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: #aab0bd;
+  font-size: 14px;
+  text-align: center;
+  pointer-events: none;
 }
 
 /* 加载和错误状态 */
@@ -1007,6 +936,8 @@ watch(windowHeight, () => {
 }
 
 .photo-item {
+  display: block;
+  text-decoration: none;
   flex: 0 0 auto;
   border-radius: 0;
   overflow: hidden;

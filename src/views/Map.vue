@@ -99,7 +99,6 @@ import {
 
 import { getMapAggregation, getClusterMedia } from '../api/map'
 import type { MapPointVO, MapClusterVO } from '../api/map'
-import { getSystemConfig } from '../api/systemConfig'
 import { gcj02ToWgs84, wgs84ToGcj02 } from '../utils/coordTransform'
 
 import MapSidebar, { type SidebarEntry, type EntryFilter } from './map/MapSidebar.vue'
@@ -116,7 +115,6 @@ const timelineRef = ref<InstanceType<typeof MapTimeline> | null>(null)
 
 let map: maplibregl.Map | null = null
 const activeLayer = ref('protomaps-light')
-const customDomain = ref('albireo.shuumatu.com')
 
 /**
  * 从「旅途回忆」卡片跳过来时，URL 带有 ?bboxMinLng&bboxMinLat&bboxMaxLng&bboxMaxLat&start&end，
@@ -385,31 +383,8 @@ function bboxToGcj02(b: { minLng: number; minLat: number; maxLng: number; maxLat
 
 // --- 工具函数 ---
 
-function getDomain(): string {
-  const d = customDomain.value
-  return d.startsWith('http') ? d : `https://${d}`
-}
-
-function objectKeyToThumbnail(objectKey: string, mediaType: string): string {
-  const domain = getDomain()
-  const key = objectKey.startsWith('/') ? objectKey.slice(1) : objectKey
-
-  if (mediaType === 'video') {
-    const replaced = key.replace(/\/original\/[^/]*$/, '/thumbnails/thumbnail.jpg')
-    return `${domain}/${replaced}`
-  }
-  const replaced = key.replace(/\/raw\/[^/]+$/, '/medium/medium.jpg')
-  return `${domain}/${replaced}`
-}
-
-function resolveThumbnail(objectKey: string, thumbnailUrl: string | null, mediaType: string): string {
-  if (thumbnailUrl) {
-    if (thumbnailUrl.startsWith('http')) return thumbnailUrl
-    const domain = getDomain()
-    const normalized = thumbnailUrl.startsWith('/') ? thumbnailUrl.slice(1) : thumbnailUrl
-    return `${domain}/${normalized}`
-  }
-  return objectKeyToThumbnail(objectKey, mediaType)
+function resolveThumbnail(_objectKey: string, thumbnailUrl: string | null, _mediaType: string): string {
+  return thumbnailUrl || ''
 }
 
 function resolveItemThumb(item: MapPointVO): string {
@@ -954,8 +929,7 @@ function navigateToDetail(point: MapPointVO) {
     ? { name: 'VideoPlayer', params: { uuid: point.uuid } }
     : { name: 'ImageDetail', params: { uuid: point.uuid } }
 
-  const resolved = router.resolve(routeLocation)
-  window.open(resolved.href, '_blank', 'noopener')
+  router.push(routeLocation)
 }
 
 // --- 键盘快捷键 ---
@@ -1014,17 +988,23 @@ function onKeyDown(e: KeyboardEvent) {
 // --- 生命周期 ---
 
 let resizeObserver: ResizeObserver | null = null
+let wasMobile = false
+
+function onViewportResize() {
+  const isMobile = window.innerWidth < 720
+  if (isMobile !== wasMobile) {
+    sidebarCollapsed.value = isMobile
+    wasMobile = isMobile
+  }
+}
 
 onMounted(async () => {
-  // 移动端默认收起侧栏，避免 320px 侧栏挤压窄屏地图
-  if (window.innerWidth < 720) {
-    sidebarCollapsed.value = true
-  }
+  // 首次进入及跨越窄屏断点时收起侧栏，避免 320px 侧栏挤压地图。
+  wasMobile = window.innerWidth < 720
+  sidebarCollapsed.value = wasMobile
+  window.addEventListener('resize', onViewportResize)
 
-  const domainConfig = await getSystemConfig('storage', 'custom_domain').catch(() => null)
-  if (domainConfig?.value) {
-    customDomain.value = domainConfig.value
-  }
+
 
   const initialStyle = await loadVectorStyle('/map-styles/light.json')
 
@@ -1125,6 +1105,7 @@ onUnmounted(() => {
   }
   document.removeEventListener('keydown', onKeyDown)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
+  window.removeEventListener('resize', onViewportResize)
 })
 </script>
 

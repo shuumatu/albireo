@@ -17,9 +17,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onBeforeUnmount, onMounted, watch} from 'vue'
+import { ref, shallowRef, computed, onBeforeUnmount, onMounted, watch} from 'vue'
 import { VideoPlayer } from '@videojs-player/vue'
 import videojs from 'video.js'
+import type Player from 'video.js/dist/types/player'
+import type Component from 'video.js/dist/types/component'
+import type MenuButtonType from 'video.js/dist/types/menu/menu-button'
+import type MenuItemType from 'video.js/dist/types/menu/menu-item'
+
+type GalleryPlayer = Player & { controlBar: Component; _customCleanup?: () => void }
+type QualityOptions = { label: string; qualityLabel: string; qualityIndex: number }
+// Video.js discovers custom components at runtime; its base declaration loses the subtype.
+type QualityButton = Component & { items: Array<MenuItemType & { qualityIndex: number }>; updateButtonText(): void }
+
 import 'video.js/dist/video-js.css'
 import type { VideoSource } from '../types/video'
 
@@ -39,7 +49,7 @@ const playbackRates = ref([0.5, 0.75, 1, 1.25, 1.5, 2])
 
 // 状态
 const videoPlayerRef = ref(null)
-const player = ref(null)
+const player = shallowRef<GalleryPlayer | null>(null)
 const currentQuality = ref(0)
 // 同步 props 到本地状态，并在数据变化时纠正 currentQuality
 watch(
@@ -54,6 +64,15 @@ watch(
 )
 // 当前选中的视频源
 const currentSource = computed(() => sources.value[currentQuality.value])
+// The metadata request finishes after Video.js mounts. The wrapper's initial
+// `src` prop can therefore be empty; explicitly synchronize later sources.
+watch([() => props.videoSources, player], ([availableSources, instance]) => {
+  const source = availableSources?.[currentQuality.value]
+  if (source?.src && instance && instance.currentSrc() !== source.src) {
+    instance.src({ src: source.src, type: source.type })
+    instance.load()
+  }
+}, { immediate: true, flush: 'post' })
 
 // 键盘事件处理
 const handleKeydown = (event: KeyboardEvent) => {
@@ -79,42 +98,44 @@ const handleKeydown = (event: KeyboardEvent) => {
     case 'ArrowLeft':
       // 左方向键：后退5秒
       event.preventDefault()
-      const currentTimeLeft = player.value.currentTime()
+      const currentTimeLeft = player.value.currentTime() ?? 0
       player.value.currentTime(Math.max(0, currentTimeLeft - 3))
       break
       
     case 'ArrowRight':
       // 右方向键：前进5秒
       event.preventDefault()
-      const currentTimeRight = player.value.currentTime()
-      const duration = player.value.duration()
+      const currentTimeRight = player.value.currentTime() ?? 0
+      const duration = player.value.duration() ?? 0
       player.value.currentTime(Math.min(duration, currentTimeRight + 3))
       break
       
     case 'ArrowUp':
       // 上方向键：增加音量（可选）
       event.preventDefault()
-      const currentVolume = player.value.volume()
+      const currentVolume = player.value.volume() ?? 1
       player.value.volume(Math.min(1, currentVolume + 0.1))
       break
       
     case 'ArrowDown':
       // 下方向键：减少音量（可选）
       event.preventDefault()
-      const volume = player.value.volume()
+      const volume = player.value.volume() ?? 1
       player.value.volume(Math.max(0, volume - 0.1))
       break
   }
 }
 
 // 创建清晰度选择组件
-const createQualityComponents = (playerInstance) => {
-  const MenuButton = videojs.getComponent('MenuButton')
-  const MenuItem = videojs.getComponent('MenuItem')
+const createQualityComponents = () => {
+  const MenuButton = videojs.getComponent('MenuButton') as unknown as typeof MenuButtonType
+  const MenuItem = videojs.getComponent('MenuItem') as typeof MenuItemType
 
   // 清晰度菜单项
 class QualityMenuItem extends MenuItem {
-  constructor(player, options) {
+  qualityIndex: number
+  qualityLabel: string
+  constructor(player: Player, options: QualityOptions) {
     super(player, options)
     this.qualityIndex = options.qualityIndex
     this.qualityLabel = options.qualityLabel
@@ -188,19 +209,19 @@ class QualityMenuItem extends MenuItem {
     this.player().one('error', onError)
     
     // 更新菜单选中状态
-    const menuItems = this.player().controlBar.getChild('qualityMenuButton').items
+    const menuItems = ((this.player() as GalleryPlayer).controlBar.getChild('qualityMenuButton') as QualityButton).items
     menuItems.forEach(item => {
       item.selected(item.qualityIndex === this.qualityIndex)
     })
     
-    const button = this.player().controlBar.getChild('qualityMenuButton')
+    const button = (this.player() as GalleryPlayer).controlBar.getChild('qualityMenuButton') as QualityButton
     button.updateButtonText()
   }
 }
 
   // 清晰度菜单按钮
   class QualityMenuButton extends MenuButton {
-    constructor(player, options) {
+    constructor(player: Player, options: Record<string, unknown>) {
       super(player, options)
       this.addClass('vjs-quality-button')
     }
@@ -246,7 +267,8 @@ class QualityMenuItem extends MenuItem {
     }
   }
 
-  videojs.registerComponent('QualityMenuButton', QualityMenuButton)
+  // Video.js 8 declares MenuButton.setIcon as void, unlike its Component base.
+  videojs.registerComponent('QualityMenuButton', QualityMenuButton as unknown as typeof Component)
 }
 
 // 生命周期
@@ -269,8 +291,8 @@ onBeforeUnmount(() => {
 })
 
 // 事件处理
-const handleMounted = ({ player: videoPlayer }) => {
-  player.value = videoPlayer
+const handleMounted = ({ player: videoPlayer }: { player: Player }) => {
+  player.value = videoPlayer as GalleryPlayer
   console.log('播放器已挂载')
 }
 
@@ -294,9 +316,9 @@ const handleReady = () => {
     })
     
     // 手动触发用户活动，确保控制栏显示逻辑正常
-    player.value.userActive(true)
+    player.value?.userActive(true)
     
-    createQualityComponents(player.value)
+    createQualityComponents()
     
     const controlBar = player.value.controlBar
 
@@ -347,7 +369,7 @@ const handleReady = () => {
     // 捕获所有 focus 事件
     playerEl.addEventListener(
       'focus',
-      (e) => {
+      (e: Event) => {
         const target = e.target as HTMLElement
         if (
           target.classList.contains('vjs-control') || // 普通控件
@@ -370,9 +392,9 @@ const handleReady = () => {
       if (inactivityTimer) {
         clearTimeout(inactivityTimer)
       }
-      player.value.userActive(true)
+      player.value?.userActive(true)
       inactivityTimer = setTimeout(() => {
-        player.value.userActive(false)
+        player.value?.userActive(false)
       }, 1000)
     }
 
@@ -394,7 +416,7 @@ const handleReady = () => {
         cancelAnimationFrame(rafId)
         rafId = null
       }
-      player.value.userActive(false)
+      player.value?.userActive(false)
     }
 
     const handleMouseEnter = () => {
@@ -420,8 +442,8 @@ const handleReady = () => {
         cancelAnimationFrame(rafId)
         rafId = null
       }
-      player.value.off('play', onPlay)
-      player.value.off('pause', onPause)
+      player.value?.off('play', onPlay)
+      player.value?.off('pause', onPause)
       playerEl.removeEventListener('mousemove', throttledResetInactivity)
       playerEl.removeEventListener('mouseleave', handleMouseLeave)
       playerEl.removeEventListener('mouseenter', handleMouseEnter)

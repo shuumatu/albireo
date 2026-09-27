@@ -1,5 +1,5 @@
 <template>
-  <div class="trip-card" @click="handleClick">
+  <router-link class="trip-card" :to="tripRoute" :aria-label="`查看${title}的地图`">
     <div class="trip-cover">
       <img
         v-if="trip.coverUrl && !errored"
@@ -23,12 +23,11 @@
         </div>
       </div>
     </div>
-  </div>
+  </router-link>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import type { TripVO } from '../api/recommend'
 
 interface Props {
@@ -36,7 +35,6 @@ interface Props {
 }
 
 const props = defineProps<Props>()
-const router = useRouter()
 const errored = ref(false)
 
 const title = computed(() => `${props.trip.year}年${props.trip.month}月的旅途`)
@@ -68,9 +66,9 @@ function formatDate(raw: string | null): string {
   return `${y}-${m}-${day}`
 }
 
-function handleClick() {
+const tripRoute = computed(() => {
   // 优先传 bbox：Map.vue 用 fitBounds 让视口紧贴这些媒体，避免视口外溢导致计数对不上
-  const route = router.resolve({
+  return {
     name: 'Map',
     query: {
       bboxMinLng: props.trip.bboxMinLng,
@@ -80,13 +78,15 @@ function handleClick() {
       start: props.trip.startDate,
       end: props.trip.endDate
     }
-  })
-  window.open(route.href, '_blank')
-}
+  }
+})
 </script>
 
 <style scoped>
 .trip-card {
+  display: block;
+  color: inherit;
+  text-decoration: none;
   width: 320px;
   flex-shrink: 0;
   cursor: pointer;

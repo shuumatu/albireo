@@ -77,7 +77,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { NDrawer, NDrawerContent, NIcon, NSpin } from 'naive-ui'
 import {
   VideocamOutline,
@@ -103,10 +103,16 @@ const emit = defineEmits<{
   (e: 'loadMore'): void
 }>()
 
-// 响应式宽度：窗口窄时占满 90%
+// 抽屉打开后窗口仍可能缩放；宽度必须依赖响应式值才能同步更新。
+const viewportWidth = ref(typeof window === 'undefined' ? 480 : window.innerWidth)
+function updateViewportWidth() {
+  viewportWidth.value = window.innerWidth
+}
+onMounted(() => window.addEventListener('resize', updateViewportWidth))
+onUnmounted(() => window.removeEventListener('resize', updateViewportWidth))
+
 const drawerWidth = computed(() => {
-  if (typeof window === 'undefined') return 480
-  return Math.min(480, Math.round(window.innerWidth * 0.9))
+  return Math.min(480, Math.round(viewportWidth.value * 0.9))
 })
 
 /**

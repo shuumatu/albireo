@@ -10,7 +10,9 @@ import type { RecommendItemVO } from './recommend'
  */
 export interface SearchItemVO extends RecommendItemVO {
   score: number
+  matchType?: 'keyword' | 'semantic' | 'hybrid'
 }
+export interface SearchOutcome { items: SearchItemVO[]; mode: 'hybrid' | 'keyword_fallback' }
 
 /**
  * 文本搜索请求体。
@@ -31,8 +33,8 @@ export interface TextSearchRequest {
  * 文本搜索：把自然语言查询喂给 embedding-service 转成向量，
  * 再走 pgvector ANN 找视觉最相关的图片+视频。
  */
-export function searchByText(req: TextSearchRequest): Promise<SearchItemVO[]> {
-  return request.post('/api/metadata/search/text', req)
+export function searchByText(req: TextSearchRequest): Promise<SearchOutcome> {
+  return request.post('/api/metadata/search/text', req, { params: { includeStatus: true } })
 }
 
 /**

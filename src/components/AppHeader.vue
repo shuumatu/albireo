@@ -38,7 +38,7 @@
         />
       </div>
 
-      <n-dropdown :options="userMenuOptions" @select="handleUserMenuSelect">
+      <n-dropdown v-if="isLoggedIn" :options="userMenuOptions" @select="handleUserMenuSelect">
         <n-button text class="user-btn">
           <n-avatar :size="28" round class="user-avatar-small">
             {{ username?.charAt(0)?.toUpperCase() || 'U' }}
@@ -46,20 +46,32 @@
           <span class="username-text">{{ username || '用户' }}</span>
         </n-button>
       </n-dropdown>
+      <n-button v-else text class="user-btn" @click="goLogin">登录</n-button>
     </div>
   </n-layout-header>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 const route = useRoute()
 const router = useRouter()
 const activeKey = ref(route.path)
 const searchQuery = ref('')
+const username = ref('')
+const isLoggedIn = ref(false)
+
+function syncLoginState() {
+  isLoggedIn.value = Boolean(localStorage.getItem('token'))
+  username.value = localStorage.getItem('username') || ''
+}
+syncLoginState()
+onMounted(() => window.addEventListener('storage', syncLoginState))
+onBeforeUnmount(() => window.removeEventListener('storage', syncLoginState))
 
 watch(route, () => {
+  syncLoginState()
   activeKey.value = route.path
   // 离开搜索页时清空输入框，回到搜索页时回填 query
   if (route.name === 'Search' && typeof route.query.q === 'string') {
@@ -75,7 +87,9 @@ function goSearch() {
   router.push({ name: 'Search', query: { q } })
 }
 
-const username = computed(() => localStorage.getItem('username') || '')
+function goLogin() {
+  router.push({ name: 'Login', query: { redirect: route.fullPath } })
+}
 
 const menuOptions = [
   {
@@ -214,5 +228,35 @@ function handleUserMenuSelect(key) {
   font-size: 14px;
   opacity: 0.6;
   margin-right: 4px;
+}
+
+@media (max-width: 600px) {
+  .header {
+    height: 104px;
+    padding: 6px 12px;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-content: center;
+  }
+
+  .logo img {
+    height: 32px;
+  }
+
+  .right-section {
+    margin-left: auto;
+    gap: 4px;
+  }
+
+  .menu :deep(.n-menu-item) {
+    padding: 0 8px;
+  }
+
+  .search-wrapper {
+    order: 3;
+    flex: 0 0 100%;
+    max-width: none;
+    padding: 0;
+  }
 }
 </style>

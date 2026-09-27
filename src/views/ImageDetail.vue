@@ -189,7 +189,6 @@ import { getImageInfo } from '../api/image'
 import CommentSection from '../components/CommentSection.vue'
 import SimilarStrip from '../components/SimilarStrip.vue'
 import type { ImageInfoVO } from '../api/image'
-import { getSystemConfig } from '../api/systemConfig'
 import dayjs from 'dayjs'
 
 const route = useRoute()
@@ -210,7 +209,6 @@ const error = ref(false)
 const imageLoaded = ref(false)
 const imageLoadError = ref(false)
 const showPreview = ref(false)
-const customDomain = ref('albireo.shuumatu.com')
 
 const uuid = Array.isArray(route.params.uuid)
   ? route.params.uuid[0]
@@ -230,21 +228,8 @@ const statusText = computed(() => {
 
 const fullImageUrl = computed(() => {
   if (!imageData.value) return ''
-  const url = imageData.value.imageUrl
-  let full: string
-  if (url.startsWith('http')) {
-    full = url
-  } else {
-    const domain = customDomain.value.startsWith('http')
-      ? customDomain.value
-      : `https://${customDomain.value}`
-    const normalized = url.startsWith('/') ? url.slice(1) : url
-    full = `${domain}/${normalized}`
-  }
-  if (/\.heic$/i.test(full)) {
-    full = full.replace(/\/raw\/[^/]+\.heic$/i, '/original/original.jpg')
-  }
-  return full
+  // Metadata has already authorized and replaced managed media with a file ticket.
+  return imageData.value.displayUrl || imageData.value.imageUrl || ''
 })
 
 function formatDate(dateStr: string) {
@@ -269,13 +254,7 @@ async function fetchImageInfo() {
   loading.value = true
   error.value = false
   try {
-    const [info, domainConfig] = await Promise.all([
-      getImageInfo(uuid as string),
-      getSystemConfig('storage', 'custom_domain').catch(() => null)
-    ])
-    if (domainConfig?.value) {
-      customDomain.value = domainConfig.value
-    }
+    const info = await getImageInfo(uuid as string)
     if (!info) {
       error.value = true
     } else {

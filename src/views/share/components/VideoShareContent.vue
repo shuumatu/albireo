@@ -25,12 +25,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { getSystemConfig } from '../../../api/systemConfig'
+import { computed } from 'vue'
 
 const props = defineProps<{
   content: {
     objectKey: string
+    sourceUrl?: string
     title?: string
     description?: string
     coverUrl?: string
@@ -40,28 +40,7 @@ const props = defineProps<{
   }
 }>()
 
-const customDomain = ref('albireo.shuumatu.com')
-
-onMounted(async () => {
-  try {
-    const config = await getSystemConfig('storage', 'custom_domain')
-    if (config?.value) {
-      customDomain.value = config.value
-    }
-  } catch {
-    // fallback to default
-  }
-})
-
-const videoSrc = computed(() => {
-  const domain = customDomain.value.startsWith('http')
-    ? customDomain.value
-    : `https://${customDomain.value}`
-  const key = props.content.objectKey?.startsWith('/')
-    ? props.content.objectKey.slice(1)
-    : props.content.objectKey
-  return `${domain}/${key}`
-})
+const videoSrc = computed(() => props.content.sourceUrl || '')
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('zh-CN', {

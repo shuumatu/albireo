@@ -63,4 +63,14 @@ html, body {
   overflow: auto; /* 改为 hidden，禁止 router-view 层级的滚动 */
   position: relative;
 }
+
+@media (max-width: 600px) {
+  .app-header {
+    height: 104px;
+  }
+
+  .app-content {
+    height: calc(100vh - 104px);
+  }
+}
 </style>

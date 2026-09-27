@@ -44,7 +44,7 @@
             placeholder="请输入访问密码"
             show-password-on="click"
             size="large"
-            :status="passwordError ? 'error' : 'default'"
+            :status="passwordError ? 'error' : undefined"
             @update:value="passwordError = ''"
             @keyup.enter="submitPassword"
           />
@@ -151,7 +151,7 @@ watch(shareData, () => {
 onMounted(async () => {
   try {
     const data = await getShareMeta(shareCode)
-    shareData.value = data
+    shareData.value = data.needPassword ? data : await accessShareWithPassword(shareCode, '')
     needPassword.value = data.needPassword
     applyDocumentTitle()
   } catch (e: any) {

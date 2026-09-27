@@ -1,7 +1,7 @@
 <template>
   <n-card :bordered="false">
     <div class="image-container">
-      <img :src="content.imageUrl" :alt="content.title || '分享图片'" class="share-image" />
+      <img :src="content.displayUrl || content.imageUrl" :alt="content.title || '分享图片'" class="share-image" />
     </div>
     <n-space vertical :size="12" style="margin-top: 16px">
       <n-h3 v-if="content.title" style="margin: 0">{{ content.title }}</n-h3>
@@ -19,6 +19,7 @@ defineProps<{
     objectKey: string
     fileName?: string
     imageUrl: string
+    displayUrl?: string
     title?: string
     description?: string
     type?: string

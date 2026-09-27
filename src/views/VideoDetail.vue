@@ -55,7 +55,6 @@ import SimilarStrip from '../components/SimilarStrip.vue'
 import type { VideoSource } from '../types/video'
 import { useRoute } from 'vue-router'
 import { getVideoInfo } from '../api/video'
-import { getSystemConfig } from '../api/systemConfig'
 import dayjs from 'dayjs'
 
 const route = useRoute()
@@ -75,10 +74,7 @@ const videoData = ref({
 
 async function fetchVideoInfo() {
   try {
-    const [videoResponse, customDomainConfig] = await Promise.all([
-      getVideoInfo(uuid as string),
-      getSystemConfig('storage', 'custom_domain').catch(() => null)
-    ])
+    const videoResponse = await getVideoInfo(uuid as string)
 
     videoData.value.title = videoResponse.title
     videoData.value.description = videoResponse.description
@@ -88,50 +84,16 @@ async function fetchVideoInfo() {
     }
     videoData.value.tags = videoResponse.tags.map(tag => tag.name)
 
-    const objectKey = videoResponse.objectKey || (videoResponse as any).url || ''
-    const customDomain = customDomainConfig?.value || 'albireo.shuumatu.com'
-    const domain = customDomain.startsWith('http') ? customDomain : `https://${customDomain}`
-    const normalizedObjectKey = objectKey.startsWith('/') ? objectKey.slice(1) : objectKey
-    const originalUrl = `${domain}/${normalizedObjectKey}`
-    const basePath = originalUrl.replace(/\/original\/[^/]*$/, '')
-
-    // 原画始终存在（上传完就有，不依赖转码）；转码档按后端 video_versions 实际登记
-    // 的 'done' 行筛选——避免播放器列出 R2 上根本不存在的清晰度而 404。
-    const sources: VideoSource[] = [
-      { src: originalUrl, label: '原画', type: 'video/mp4' },
-    ]
-    const QUALITY_DISPLAY: Array<{ resolution: string; label: string }> = [
-      { resolution: '1080p', label: '1080P' },
-      { resolution: '720p', label: '720P' },
-      { resolution: '480p', label: '480P' },
-    ]
-    const doneResolutions = new Set(
-      (videoResponse.videoVersions ?? [])
-        .filter(v => v.status === 'done')
-        .map(v => v.resolution)
-    )
-    for (const q of QUALITY_DISPLAY) {
-      if (doneResolutions.has(q.resolution)) {
-        sources.push({
-          src: `${basePath}/${q.resolution}/${q.resolution}.mp4`,
-          label: q.label,
-          type: 'video/mp4',
-        })
+    const sources: VideoSource[] = []
+    if (videoResponse.sourceUrl) sources.push({ src: videoResponse.sourceUrl, label: '原画', type: 'video/mp4' })
+    for (const version of videoResponse.videoVersions ?? []) {
+      if (version.status === 'done' && version.url) {
+        sources.push({ src: version.url, label: version.resolution.toUpperCase(), type: 'video/mp4' })
       }
     }
     videoSources.value = sources
+    posterUrl.value = videoResponse.coverUrl || ''
 
-    if (videoResponse.coverUrl) {
-      const coverUrl = videoResponse.coverUrl.startsWith('http')
-        ? videoResponse.coverUrl
-        : `${domain}/${videoResponse.coverUrl.startsWith('/') ? videoResponse.coverUrl.slice(1) : videoResponse.coverUrl}`
-      posterUrl.value = coverUrl
-    } else if ((videoResponse as any).thumbnailUrl) {
-      const thumbnailUrl = (videoResponse as any).thumbnailUrl
-      posterUrl.value = thumbnailUrl.startsWith('http')
-        ? thumbnailUrl
-        : `${domain}/${thumbnailUrl.startsWith('/') ? thumbnailUrl.slice(1) : thumbnailUrl}`
-    }
   } catch (error) {
     console.error('获取视频信息失败:', error)
   }

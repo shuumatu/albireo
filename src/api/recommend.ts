@@ -63,7 +63,7 @@ export interface TripVO {
   coverUrl: string | null
   /**
    * 反向地理编码后的简短地名，如「杭州市 · 西湖区」「日本 · 东京」。
-   * 后端未配置 AMap key 或缓存未命中时为 null，前端降级显示坐标。
+   * 后端离线行政区划未命中时为 null，前端降级显示坐标。
    */
   placeName: string | null
 }

@@ -1,8 +1,8 @@
 <template>
-  <div
+  <router-link
     class="media-card"
     :class="{ 'is-video': item.itemType === 'video' }"
-    @click="handleClick"
+    :to="detailRoute"
   >
     <div class="media-thumb">
       <img
@@ -36,12 +36,11 @@
       <div class="media-title" :title="displayTitle">{{ displayTitle }}</div>
       <div v-if="formattedDate" class="media-date">{{ formattedDate }}</div>
     </div>
-  </div>
+  </router-link>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import type { RecommendItemVO } from '../api/recommend'
 
 interface Props {
@@ -49,7 +48,9 @@ interface Props {
 }
 
 const props = defineProps<Props>()
-const router = useRouter()
+const detailRoute = computed(() => props.item.itemType === 'video'
+  ? { name: 'VideoPlayer', params: { uuid: props.item.uuid } }
+  : { name: 'ImageDetail', params: { uuid: props.item.uuid } })
 
 const fallbackTitle = computed(() => {
   return props.item.itemType === 'video' ? '未命名视频' : '未命名图片'
@@ -83,16 +84,12 @@ function onImageError() {
   errored.value = true
 }
 
-function handleClick() {
-  const route = props.item.itemType === 'video'
-    ? router.resolve({ name: 'VideoPlayer', params: { uuid: props.item.uuid } })
-    : router.resolve({ name: 'ImageDetail', params: { uuid: props.item.uuid } })
-  window.open(route.href, '_blank')
-}
 </script>
 
 <style scoped>
 .media-card {
+  color: inherit;
+  text-decoration: none;
   position: relative;
   width: 240px;
   flex-shrink: 0;
