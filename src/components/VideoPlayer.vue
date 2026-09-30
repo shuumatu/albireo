@@ -2,7 +2,6 @@
   <div class="video-player-container">
     <video-player
       ref="videoPlayerRef"
-      :src="currentSource?.src || ''"
       :poster="poster"
       :controls="true"
       :playback-rates="playbackRates"
@@ -17,7 +16,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, shallowRef, computed, onBeforeUnmount, onMounted, watch} from 'vue'
+import { ref, shallowRef, onBeforeUnmount, onMounted, watch } from 'vue'
 import { VideoPlayer } from '@videojs-player/vue'
 import videojs from 'video.js'
 import type Player from 'video.js/dist/types/player'
@@ -28,7 +27,7 @@ import type MenuItemType from 'video.js/dist/types/menu/menu-item'
 type GalleryPlayer = Player & { controlBar: Component; _customCleanup?: () => void }
 type QualityOptions = { label: string; qualityLabel: string; qualityIndex: number }
 // Video.js discovers custom components at runtime; its base declaration loses the subtype.
-type QualityButton = Component & { items: Array<MenuItemType & { qualityIndex: number }>; updateButtonText(): void }
+type QualityButton = Component & { items: Array<MenuItemType & { qualityIndex: number }>; update(): void; updateButtonText(): void }
 
 import 'video.js/dist/video-js.css'
 import type { VideoSource } from '../types/video'
@@ -51,6 +50,8 @@ const playbackRates = ref([0.5, 0.75, 1, 1.25, 1.5, 2])
 const videoPlayerRef = ref(null)
 const player = shallowRef<GalleryPlayer | null>(null)
 const currentQuality = ref(0)
+let qualityButton: QualityButton | null = null
+let cancelQualitySwitch: (() => void) | null = null
 // 同步 props 到本地状态，并在数据变化时纠正 currentQuality
 watch(
   () => props.videoSources,
@@ -62,17 +63,23 @@ watch(
   },
   { immediate: true, deep: true }
 )
-// 当前选中的视频源
-const currentSource = computed(() => sources.value[currentQuality.value])
-// The metadata request finishes after Video.js mounts. The wrapper's initial
-// `src` prop can therefore be empty; explicitly synchronize later sources.
-watch([() => props.videoSources, player], ([availableSources, instance]) => {
-  const source = availableSources?.[currentQuality.value]
-  if (source?.src && instance && instance.currentSrc() !== source.src) {
+// Manage sources here so the wrapper does not load the same source again when
+// currentQuality changes. Metadata can also arrive after the player is ready.
+const syncSources = () => {
+  const instance = player.value
+  if (!instance || instance.isDisposed()) return
+  cancelQualitySwitch?.()
+  syncQualityButton(true)
+  const source = sources.value[currentQuality.value]
+  if (source?.src && instance.currentSrc() !== source.src) {
     instance.src({ src: source.src, type: source.type })
     instance.load()
   }
-}, { immediate: true, flush: 'post' })
+}
+watch(sources, syncSources, { deep: true, flush: 'post' })
+watch(player, syncSources, { flush: 'post' })
+
+watch(currentQuality, () => qualityButton?.updateButtonText(), { flush: 'sync' })
 
 // 键盘事件处理
 const handleKeydown = (event: KeyboardEvent) => {
@@ -136,86 +143,83 @@ class QualityMenuItem extends MenuItem {
   qualityIndex: number
   qualityLabel: string
   constructor(player: Player, options: QualityOptions) {
-    super(player, options)
+    super(player, { ...options, selectable: true })
     this.qualityIndex = options.qualityIndex
     this.qualityLabel = options.qualityLabel
     this.selected(this.qualityIndex === currentQuality.value)
   }
 
   handleClick() {
-    if (this.qualityIndex === currentQuality.value) {
+    const source = sources.value[this.qualityIndex]
+    const previousSource = sources.value[currentQuality.value]
+    if (!source || !previousSource || this.qualityIndex === currentQuality.value) {
       return
     }
 
+    cancelQualitySwitch?.()
+    const instance = this.player()
     const previousQuality = currentQuality.value
-    const currentTime = this.player().currentTime()
-    const wasPaused = this.player().paused()
-    const currentRate = this.player().playbackRate()
+    const currentTime = instance.currentTime() ?? 0
+    const wasPaused = instance.paused()
+    const currentRate = instance.playbackRate() ?? 1
+    const hadStarted = instance.hasClass('vjs-has-started')
+
+    const restorePlayback = () => {
+      instance.currentTime(currentTime)
+      instance.playbackRate(currentRate)
+      instance.hasStarted(hadStarted)
+      if (!wasPaused) {
+        instance.play()?.catch((error: Error) => {
+          // A new switch or pause can cancel the pending playback request.
+          if (error.name !== 'AbortError') console.error('恢复播放失败:', error)
+        })
+      }
+    }
+
+    const cleanup = () => {
+      instance.off('loadedmetadata', onLoadedMetadata)
+      instance.off('loadedmetadata', onFallbackLoaded)
+      instance.off('error', onError)
+      if (cancelQualitySwitch === cleanup) cancelQualitySwitch = null
+    }
 
     // 先更新选中状态和索引
     currentQuality.value = this.qualityIndex
     
-    this.player().src({
-      src: sources.value[this.qualityIndex].src,
-      type: sources.value[this.qualityIndex].type
-    })
-    
     // 监听加载成功
     const onLoadedMetadata = () => {
-      this.player().currentTime(currentTime)
-      this.player().playbackRate(currentRate)
-      if (!wasPaused) {
-        this.player().play()
-      }
-      // 清除错误监听
-      this.player().off('error', onError)
+      cleanup()
+      restorePlayback()
+    }
+
+    const onFallbackLoaded = () => {
+      cleanup()
+      restorePlayback()
     }
     
     // 监听加载失败
     const onError = () => {
-      const error = this.player().error()
-      console.error(`清晰度 ${sources.value[this.qualityIndex].label} 加载失败:`, error)
-      
-      // 清除成功监听
-      this.player().off('loadedmetadata', onLoadedMetadata)
+      console.error(`清晰度 ${source.label} 加载失败:`, instance.error())
+      cleanup()
       
       // 回退到之前的清晰度
       currentQuality.value = previousQuality
-      console.log(`回退到 ${sources.value[previousQuality].label}`)
-      
-      this.player().src({
-        src: sources.value[previousQuality].src,
-        type: sources.value[previousQuality].type
-      })
-      
-      // 恢复播放状态
-      this.player().one('loadedmetadata', () => {
-        this.player().currentTime(currentTime)
-        this.player().playbackRate(currentRate)
-        if (!wasPaused) {
-          this.player().play()
-        }
-      })
+      cancelQualitySwitch = cleanup
+      instance.one('loadedmetadata', onFallbackLoaded)
+      instance.src({ src: previousSource.src, type: previousSource.type })
       
       // 显示错误提示（可选）
-      this.player().trigger('qualitySwitchError', {
-        attemptedQuality: sources.value[this.qualityIndex].label,
-        fallbackQuality: sources.value[previousQuality].label
+      instance.trigger('qualitySwitchError', {
+        attemptedQuality: source.label,
+        fallbackQuality: previousSource.label
       })
     }
     
     // 添加监听
-    this.player().one('loadedmetadata', onLoadedMetadata)
-    this.player().one('error', onError)
-    
-    // 更新菜单选中状态
-    const menuItems = ((this.player() as GalleryPlayer).controlBar.getChild('qualityMenuButton') as QualityButton).items
-    menuItems.forEach(item => {
-      item.selected(item.qualityIndex === this.qualityIndex)
-    })
-    
-    const button = (this.player() as GalleryPlayer).controlBar.getChild('qualityMenuButton') as QualityButton
-    button.updateButtonText()
+    cancelQualitySwitch = cleanup
+    instance.one('loadedmetadata', onLoadedMetadata)
+    instance.one('error', onError)
+    instance.src({ src: source.src, type: source.type })
   }
 }
 
@@ -251,6 +255,8 @@ class QualityMenuItem extends MenuItem {
     }
 
     updateButtonText() {
+      const items = (this as unknown as QualityButton).items
+      items?.forEach(item => item.selected(item.qualityIndex === currentQuality.value))
       // 安全检查：确保 sources 和当前索引有效
       if (!sources.value.length || !sources.value[currentQuality.value]) {
         return
@@ -267,8 +273,37 @@ class QualityMenuItem extends MenuItem {
     }
   }
 
-  // Video.js 8 declares MenuButton.setIcon as void, unlike its Component base.
-  videojs.registerComponent('QualityMenuButton', QualityMenuButton as unknown as typeof Component)
+  // Keep the component local: each player's menu closes over its own sources.
+  return QualityMenuButton
+}
+
+const syncQualityButton = (rebuildMenu = false) => {
+  const instance = player.value
+  if (!instance || instance.isDisposed() || !instance._customCleanup) return
+
+  const controlBar = instance.controlBar
+  if (sources.value.length <= 1) {
+    if (qualityButton) {
+      controlBar.removeChild(qualityButton)
+      qualityButton.dispose()
+      qualityButton = null
+    }
+    return
+  }
+
+  if (!qualityButton) {
+    const QualityMenuButton = createQualityComponents()
+    const nextControl = controlBar.getChild('PictureInPictureToggle') || controlBar.getChild('FullscreenToggle')
+    const insertIndex = nextControl ? controlBar.children().indexOf(nextControl) : controlBar.children().length
+    qualityButton = controlBar.addChild(
+      new QualityMenuButton(instance, {}) as unknown as Component,
+      {},
+      insertIndex
+    ) as QualityButton
+  } else if (rebuildMenu) {
+    qualityButton.update()
+  }
+  qualityButton.updateButtonText()
 }
 
 // 生命周期
@@ -280,6 +315,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   // 移除键盘事件监听
   window.removeEventListener('keydown', handleKeydown)
+  cancelQualitySwitch?.()
+  qualityButton = null
   
   if (player.value) {
     // 调用自定义清理函数
@@ -299,28 +336,30 @@ const handleMounted = ({ player: videoPlayer }: { player: Player }) => {
 const handleReady = () => {
   console.log('播放器已就绪')
   
-  if (!player.value || !sources.value.length) {
-    console.warn('播放器或视频源未就绪')
+  const instance = player.value
+  if (!instance || instance.isDisposed()) return
+  // Video.js emits ready again after loading a new source. Setup must be
+  // idempotent so both controls and event handlers remain unique.
+  if (instance._customCleanup) {
+    syncQualityButton()
     return
   }
   
   try {
     // 设置用户不活动超时时间（1秒后隐藏控制栏）
-    player.value.options_.inactivityTimeout = 1000
+    instance.options_.inactivityTimeout = 1000
     
     // 确保控制栏自动隐藏功能启用
-    player.value.options({
+    instance.options({
       userActions: {
         hotkeys: false // 禁用默认热键，使用我们自定义的
       }
     })
     
     // 手动触发用户活动，确保控制栏显示逻辑正常
-    player.value?.userActive(true)
+    instance.userActive(true)
     
-    createQualityComponents()
-    
-    const controlBar = player.value.controlBar
+    const controlBar = instance.controlBar
 
     
     const volumePanel = controlBar.getChild('VolumePanel')
@@ -338,51 +377,23 @@ const handleReady = () => {
       }
     }
 
-    const pipToggle = controlBar.getChild('PictureInPictureToggle')
-    const fullscreenToggle = controlBar.getChild('FullscreenToggle')
-    
-    let insertIndex
-    if (pipToggle) {
-      insertIndex = controlBar.children().indexOf(pipToggle)
-    } else if (fullscreenToggle) {
-      insertIndex = controlBar.children().indexOf(fullscreenToggle)
-    } else {
-      insertIndex = controlBar.children().length
-    }
-    
-    // 只有一档时清晰度菜单是个空操作，直接不渲染按钮——避免控制栏出现
-    // 永远只能选自己的"清晰度"按钮，看起来像 bug
-    let qualityButton: any = null
-    if (sources.value.length > 1) {
-      qualityButton = controlBar.addChild('QualityMenuButton', {}, insertIndex)
-      setTimeout(() => {
-        qualityButton.updateButtonText()
-      }, 0)
-      console.log('清晰度按钮已添加到控制栏')
-    } else {
-      console.log('仅一档清晰度，跳过清晰度按钮')
-    }
-    
     // 移除 Video.js 控件聚焦问题并设置鼠标事件
-    const playerEl = player.value.el()
+    const playerEl = instance.el()
 
     // 捕获所有 focus 事件
-    playerEl.addEventListener(
-      'focus',
-      (e: Event) => {
-        const target = e.target as HTMLElement
-        if (
-          target.classList.contains('vjs-control') || // 普通控件
-          target.closest('.vjs-menu-button') ||       // 菜单类控件（倍速、清晰度等）
-          target.classList.contains('vjs-picture-in-picture-control') ||
-          target.classList.contains('vjs-fullscreen-control')
-        ) {
-          target.blur()
-          e.stopPropagation()
-        }
-      },
-      true // ⚠️ 使用捕获阶段，确保在 Video.js 内部处理前生效
-    )
+    const handleFocus = (e: Event) => {
+      const target = e.target as HTMLElement
+      if (
+        target.classList.contains('vjs-control') || // 普通控件
+        target.closest('.vjs-menu-button') ||       // 菜单类控件（倍速、清晰度等）
+        target.classList.contains('vjs-picture-in-picture-control') ||
+        target.classList.contains('vjs-fullscreen-control')
+      ) {
+        target.blur()
+        e.stopPropagation()
+      }
+    }
+    playerEl.addEventListener('focus', handleFocus, true)
     
     // 重要：移除之前可能存在的监听器，然后添加新的
     let inactivityTimer: ReturnType<typeof setTimeout> | null = null
@@ -392,9 +403,9 @@ const handleReady = () => {
       if (inactivityTimer) {
         clearTimeout(inactivityTimer)
       }
-      player.value?.userActive(true)
+      instance.userActive(true)
       inactivityTimer = setTimeout(() => {
-        player.value?.userActive(false)
+        instance.userActive(false)
       }, 1000)
     }
 
@@ -416,7 +427,7 @@ const handleReady = () => {
         cancelAnimationFrame(rafId)
         rafId = null
       }
-      player.value?.userActive(false)
+      instance.userActive(false)
     }
 
     const handleMouseEnter = () => {
@@ -429,8 +440,8 @@ const handleReady = () => {
 
     const onPlay = () => emit('playing')
     const onPause = () => emit('pause')
-    player.value.on('play', onPlay)
-    player.value.on('pause', onPause)
+    instance.on('play', onPlay)
+    instance.on('pause', onPause)
 
     // 清理函数（使用同一引用才能正确移除监听）
     const cleanup = () => {
@@ -442,15 +453,17 @@ const handleReady = () => {
         cancelAnimationFrame(rafId)
         rafId = null
       }
-      player.value?.off('play', onPlay)
-      player.value?.off('pause', onPause)
+      instance.off('play', onPlay)
+      instance.off('pause', onPause)
+      playerEl.removeEventListener('focus', handleFocus, true)
       playerEl.removeEventListener('mousemove', throttledResetInactivity)
       playerEl.removeEventListener('mouseleave', handleMouseLeave)
       playerEl.removeEventListener('mouseenter', handleMouseEnter)
     }
     
     // 保存清理函数以便后续使用
-    player.value._customCleanup = cleanup
+    instance._customCleanup = cleanup
+    syncQualityButton()
 
   } catch (error) {
     console.error('初始化清晰度按钮失败:', error)
