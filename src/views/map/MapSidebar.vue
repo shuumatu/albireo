@@ -25,7 +25,7 @@
         </button>
         <button
           type="button"
-          :class="['chip', { active: filter === 'video' }]"
+          :class="['chip', 'video', { active: filter === 'video' }]"
           aria-label="只看视频"
           :aria-pressed="filter === 'video'"
           @click="$emit('update:filter', 'video')"
@@ -35,7 +35,7 @@
         </button>
         <button
           type="button"
-          :class="['chip', { active: filter === 'image' }]"
+          :class="['chip', 'image', { active: filter === 'image' }]"
           aria-label="只看图片"
           :aria-pressed="filter === 'image'"
           @click="$emit('update:filter', 'image')"
@@ -211,7 +211,7 @@ function onThumbError(event: Event) {
   justify-content: center;
   gap: 5px;
   padding: 6px 10px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--surface);
   border: 1px solid transparent;
   border-radius: var(--map-radius-pill);
   color: var(--map-text-secondary);
@@ -224,14 +224,28 @@ function onThumbError(event: Event) {
 }
 
 .chip:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--map-text-primary);
+  background: var(--map-accent-soft);
+  color: var(--map-accent);
 }
 
 .chip.active {
   background: var(--map-accent-soft);
-  color: #fff;
-  border-color: var(--map-accent-strong);
+  color: var(--map-accent);
+  border-color: var(--map-accent);
+}
+
+.chip.video .n-icon {
+  color: var(--map-video);
+}
+
+.chip.image .n-icon {
+  color: var(--map-image);
+}
+
+.chip.image.active {
+  background: var(--star-gold-soft);
+  color: var(--map-image);
+  border-color: var(--map-image);
 }
 
 .chip-count {
@@ -275,7 +289,7 @@ function onThumbError(event: Event) {
 
 .entry-item:hover,
 .entry-item.hovered {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--map-accent-soft);
   border-color: var(--map-glass-border-strong);
 }
 
@@ -291,7 +305,7 @@ function onThumbError(event: Event) {
   height: 56px;
   border-radius: var(--map-radius-sm);
   overflow: hidden;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--bg);
 }
 
 .entry-thumb {
@@ -314,8 +328,8 @@ function onThumbError(event: Event) {
   min-width: 20px;
   height: 18px;
   padding: 0 5px;
-  background: var(--map-accent-strong);
-  color: #fff;
+  background: var(--map-count);
+  color: var(--accent-ink);
   font-size: 10px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -323,7 +337,7 @@ function onThumbError(event: Event) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--map-glass-bg-strong);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
@@ -337,17 +351,17 @@ function onThumbError(event: Event) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.65);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: var(--map-glass-bg-strong);
+  color: var(--accent-ink);
+  border: 1px solid var(--map-glass-border);
 }
 
 .entry-type-pill.video {
-  background: color-mix(in srgb, var(--map-video) 75%, rgba(0, 0, 0, 0.6));
+  background: var(--map-video);
 }
 
 .entry-type-pill.image {
-  background: color-mix(in srgb, var(--map-image) 75%, rgba(0, 0, 0, 0.6));
+  background: var(--map-image);
 }
 
 .entry-meta {
@@ -428,7 +442,7 @@ function onThumbError(event: Event) {
 }
 
 .foot-stat strong {
-  color: var(--map-text-primary);
+  color: var(--map-count);
   font-weight: 600;
   margin-right: 2px;
 }

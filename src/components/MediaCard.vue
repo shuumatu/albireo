@@ -125,10 +125,14 @@ function onImageError() {
   inset: 9px;
   pointer-events: none;
   background:
-    linear-gradient(#d9edf5, #d9edf5) left top/14px 1px no-repeat,
-    linear-gradient(#d9edf5, #d9edf5) left top/1px 14px no-repeat,
-    linear-gradient(#d9edf5, #d9edf5) right bottom/14px 1px no-repeat,
-    linear-gradient(#d9edf5, #d9edf5) right bottom/1px 14px no-repeat;
+    linear-gradient(var(--star-gold), var(--star-gold)) left top/14px 1px
+      no-repeat,
+    linear-gradient(var(--star-gold), var(--star-gold)) left top/1px 14px
+      no-repeat,
+    linear-gradient(var(--star-blue), var(--star-blue)) right bottom/14px 1px
+      no-repeat,
+    linear-gradient(var(--star-blue), var(--star-blue)) right bottom/1px 14px
+      no-repeat;
   opacity: 0;
   transition: opacity 0.2s;
 }
@@ -148,10 +152,10 @@ function onImageError() {
   right: 12px;
   width: 32px;
   height: 32px;
-  background: #101416cc;
+  background: #10151fcc;
   display: grid;
   place-items: center;
-  color: #edf0ed;
+  color: var(--star-blue-bright);
 }
 .play-icon {
   font-size: 12px;
@@ -175,7 +179,7 @@ function onImageError() {
 }
 .meta-pill {
   font: 11px var(--mono);
-  color: #edf0ed;
+  color: #f1eee6;
   display: flex;
   gap: 4px;
 }
@@ -195,9 +199,15 @@ function onImageError() {
   display: inline-block;
   width: 4px;
   height: 4px;
-  background: var(--accent);
+  background: var(--accent-warm);
   vertical-align: middle;
   margin-right: 9px;
+}
+.is-video .media-title:before {
+  background: var(--accent);
+}
+.media-card:is(:hover, :focus-visible) .media-info {
+  border-color: var(--accent);
 }
 .media-date {
   margin-top: 6px;

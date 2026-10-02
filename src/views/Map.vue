@@ -53,7 +53,7 @@
 
       <Transition name="chip-fade">
         <div v-if="loading" class="loading-chip glass-panel">
-          <n-spin size="small" stroke="#64c7e1" />
+          <n-spin size="small" stroke="var(--map-accent)" />
           <span>正在加载视口…</span>
         </div>
       </Transition>
@@ -1324,7 +1324,7 @@ onUnmounted(() => {
   width: 100%;
   display: flex;
   position: relative;
-  background: #0e0e0e;
+  background: var(--bg);
   overflow: hidden;
 }
 
@@ -1366,8 +1366,8 @@ onUnmounted(() => {
 }
 
 .sidebar-handle:hover {
-  background: var(--map-glass-bg-strong);
-  color: var(--map-text-primary);
+  background: var(--map-accent-soft);
+  color: var(--map-accent);
 }
 
 .map-wrapper.sidebar-collapsed .sidebar-handle {
@@ -1538,7 +1538,7 @@ onUnmounted(() => {
   height: 100%;
   border-radius: 10px;
   overflow: hidden;
-  border: 3px solid rgba(255, 255, 255, 0.92);
+  border: 3px solid var(--map-text-primary);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
   box-sizing: border-box;
   transition:
@@ -1550,7 +1550,7 @@ onUnmounted(() => {
 .marker-anchor.is-active .cluster-marker-inner {
   box-shadow:
     0 6px 22px rgba(0, 0, 0, 0.55),
-    0 0 0 4px rgba(100, 199, 225, 0.35);
+    0 0 0 4px color-mix(in srgb, var(--map-accent) 35%, transparent);
   border-color: var(--map-accent);
 }
 
@@ -1568,15 +1568,15 @@ onUnmounted(() => {
   min-width: 22px;
   height: 22px;
   padding: 0 6px;
-  background: var(--map-accent-strong);
-  color: #fff;
+  background: var(--map-count);
+  color: var(--accent-ink);
   font-size: 11px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 22px;
   text-align: center;
   border-radius: 11px;
-  border: 2px solid #fff;
+  border: 2px solid var(--map-glass-bg-strong);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
   font-family: system-ui, sans-serif;
 }
@@ -1588,7 +1588,7 @@ onUnmounted(() => {
   height: 100%;
   border-radius: 10px;
   overflow: hidden;
-  border: 2px solid rgba(255, 255, 255, 0.92);
+  border: 2px solid var(--map-text-primary);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
   box-sizing: border-box;
   transition:
@@ -1602,7 +1602,7 @@ onUnmounted(() => {
   transform: scale(1.1);
   box-shadow:
     0 5px 16px rgba(0, 0, 0, 0.5),
-    0 0 0 4px rgba(100, 199, 225, 0.32);
+    0 0 0 4px color-mix(in srgb, var(--map-accent) 32%, transparent);
   border-color: var(--map-accent);
   z-index: 10;
 }
@@ -1624,17 +1624,17 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  color: #fff;
+  background: var(--map-glass-bg-strong);
+  border: 1px solid var(--map-glass-border);
+  color: var(--accent-ink);
 }
 
 .point-type-badge.video {
-  background: color-mix(in srgb, var(--map-video) 80%, rgba(0, 0, 0, 0.5));
+  background: var(--map-video);
 }
 
 .point-type-badge.image {
-  background: color-mix(in srgb, var(--map-image) 80%, rgba(0, 0, 0, 0.5));
+  background: var(--map-image);
 }
 
 .point-type-badge svg {
@@ -1644,13 +1644,13 @@ onUnmounted(() => {
 /* ---- pulse: 侧栏点击单点时短暂高亮 ---- */
 @keyframes marker-pulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(100, 199, 225, 0.6);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--map-accent) 60%, transparent);
   }
   70% {
-    box-shadow: 0 0 0 18px rgba(100, 199, 225, 0);
+    box-shadow: 0 0 0 18px transparent;
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(100, 199, 225, 0);
+    box-shadow: 0 0 0 0 transparent;
   }
 }
 

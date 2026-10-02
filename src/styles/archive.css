@@ -1,15 +1,29 @@
 :root {
-  --bg: #101416;
-  --surface: #1b2226;
-  --surface-raised: #202a2f;
-  --text: #edf0ed;
-  --muted: #a4b2ba;
-  --line: #38474e;
-  --accent: #64c7e1;
-  --accent-ink: #102026;
-  --paper: #e5e8e5;
-  --paper-ink: #172126;
-  --paper-muted: #526970;
+  /* Albireo: warm gold landmarks, cool blue interaction, neutral imagery. */
+  --star-gold: #e8bc72;
+  --star-gold-bright: #f4d8a3;
+  --star-gold-pressed: #d5a75c;
+  --star-gold-soft: rgba(232, 188, 114, 0.14);
+  --star-blue: #80b5f4;
+  --star-blue-bright: #abcdf8;
+  --star-blue-strong: #3978ba;
+  --star-blue-soft: rgba(128, 181, 244, 0.14);
+  --bg: #10151f;
+  --surface: #192332;
+  --surface-raised: #223047;
+  --text: #f1eee6;
+  --muted: #a8b4c8;
+  --line: #34445a;
+  --accent: var(--star-blue);
+  --accent-warm: var(--star-gold);
+  --accent-soft: var(--star-blue-soft);
+  --accent-warm-soft: var(--star-gold-soft);
+  --accent-ink: #10151f;
+  --paper: #f0eadc;
+  --paper-ink: #202b3c;
+  --paper-muted: #586476;
+  --paper-blue: #2c6097;
+  --paper-gold: #80591d;
   --header-height: 88px;
   --mono: 'Cascadia Code', Consolas, monospace;
   color-scheme: dark;
@@ -60,7 +74,7 @@ textarea:focus-visible {
   outline-color: var(--accent);
 }
 ::selection {
-  background: #64c7e14d;
+  background: var(--accent-soft);
   color: var(--text);
 }
 .site-shell {
@@ -96,14 +110,14 @@ textarea:focus-visible {
   display: block;
   font: 11px/1.5 var(--mono);
   letter-spacing: 2px;
-  color: var(--accent);
+  color: var(--accent-warm);
   margin-bottom: 12px;
 }
 .archive-heading {
   position: relative;
   margin: 0 0 40px;
   padding-left: 20px;
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--accent-warm);
 }
 .archive-heading h1 {
   font-size: clamp(28px, 3.6vw, 46px);
@@ -134,7 +148,7 @@ textarea:focus-visible {
   color: var(--accent);
 }
 .archive-action.primary {
-  background: var(--accent);
+  background: var(--star-gold);
   color: var(--accent-ink);
   border: 0;
   clip-path: polygon(
@@ -144,6 +158,13 @@ textarea:focus-visible {
     calc(100% - 8px) 100%,
     0 100%
   );
+}
+.archive-action.primary:hover {
+  background: var(--star-gold-bright);
+  color: var(--accent-ink);
+}
+.archive-action.primary:active {
+  background: var(--star-gold-pressed);
 }
 .archive-state {
   padding: 56px 24px;
@@ -172,8 +193,19 @@ textarea:focus-visible {
   top: -1px;
   width: 14px;
   height: 14px;
-  border-top: 1px solid var(--accent);
-  border-left: 1px solid var(--accent);
+  border-top: 1px solid var(--accent-warm);
+  border-left: 1px solid var(--accent-warm);
+  pointer-events: none;
+}
+.hud-panel:after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 14px;
+  height: 14px;
+  border-right: 1px solid var(--accent);
+  border-bottom: 1px solid var(--accent);
   pointer-events: none;
 }
 .sr-only {

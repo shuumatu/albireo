@@ -241,7 +241,9 @@ async function handleSubmit() {
   padding: 112px 10% 64px;
   position: relative;
   background:
-    linear-gradient(90deg, #09121980, #101416e8 72%),
+    radial-gradient(ellipse at 16% 18%, var(--star-gold-soft), transparent 48%),
+    radial-gradient(ellipse at 80% 80%, var(--star-blue-soft), transparent 48%),
+    linear-gradient(90deg, #10151f80, #10151ff2 72%),
     url('../assets/hero/frame-1-1920.webp') center/cover;
 }
 .login-home {
@@ -251,6 +253,19 @@ async function handleSubmit() {
   font-size: 20px;
   letter-spacing: 3px;
   font-weight: 700;
+  padding-left: 34px;
+}
+.login-home::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--star-gold);
+  box-shadow: 14px -4px 0 -1px var(--star-blue);
+  transform: translateY(-50%);
 }
 .login-home span {
   font-size: 11px;
@@ -265,21 +280,21 @@ async function handleSubmit() {
   margin: 24px 0;
 }
 .login-intro p {
-  color: #c5ced2;
+  color: var(--muted);
   letter-spacing: 3px;
 }
 .login-index {
   display: block;
   margin-top: 80px;
   font: 12px var(--mono);
-  color: var(--accent);
-  border-top: 1px solid #8da5b44d;
+  color: var(--star-gold);
+  border-top: 1px solid var(--line);
   padding-top: 18px;
   max-width: 280px;
 }
 .login-card {
   padding: 40px;
-  background: #161e23f2;
+  background: color-mix(in srgb, var(--surface) 95%, transparent);
   border: 1px solid var(--line);
   width: 100%;
 }
@@ -290,6 +305,7 @@ async function handleSubmit() {
   font: 600 22px var(--mono);
   letter-spacing: 4px;
   margin: 0 0 12px;
+  color: var(--star-gold-bright);
 }
 .login-subtitle,
 .footer-text {

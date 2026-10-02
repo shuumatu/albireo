@@ -102,27 +102,27 @@ watch(
   right: 8px;
   padding: 2px 8px;
   border-radius: 10px;
-  background-color: rgba(0, 0, 0, 0.6);
+  background-color: color-mix(in srgb, var(--bg) 92%, transparent);
   backdrop-filter: blur(4px);
   font-size: 11px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--text);
   pointer-events: auto;
   cursor: help;
   border: 1px solid transparent;
 }
 
 .score-high {
-  color: #58e1a4;
-  border-color: rgba(88, 225, 164, 0.4);
+  color: var(--star-gold);
+  border-color: color-mix(in srgb, var(--star-gold) 40%, transparent);
 }
 
 .score-mid {
-  color: #7cb8ff;
-  border-color: rgba(124, 184, 255, 0.3);
+  color: var(--star-blue);
+  border-color: color-mix(in srgb, var(--star-blue) 40%, transparent);
 }
 
 .score-low {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--muted);
 }
 </style>

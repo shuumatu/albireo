@@ -2,25 +2,26 @@
 
 :root {
   /* 界面浮层 */
-  --map-glass-bg: #1b2226f2;
-  --map-glass-bg-strong: #161e23fa;
-  --map-glass-border: rgba(255, 255, 255, 0.08);
-  --map-glass-border-strong: rgba(255, 255, 255, 0.14);
+  --map-glass-bg: color-mix(in srgb, var(--surface) 95%, transparent);
+  --map-glass-bg-strong: color-mix(in srgb, var(--surface) 72%, var(--bg));
+  --map-glass-border: var(--line);
+  --map-glass-border-strong: color-mix(in srgb, var(--star-blue) 42%, var(--line));
   --map-glass-blur: none;
 
   /* 文本 */
-  --map-text-primary: rgba(255, 255, 255, 0.92);
-  --map-text-secondary: rgba(255, 255, 255, 0.7);
-  --map-text-tertiary: rgba(255, 255, 255, 0.45);
+  --map-text-primary: var(--text);
+  --map-text-secondary: var(--muted);
+  --map-text-tertiary: color-mix(in srgb, var(--muted) 86%, var(--surface));
 
   /* 强调色 */
-  --map-accent: #64c7e1;
-  --map-accent-soft: rgba(100, 199, 225, 0.22);
-  --map-accent-strong: rgba(100, 199, 225, 0.95);
+  --map-accent: var(--star-blue);
+  --map-accent-soft: var(--star-blue-soft);
+  --map-accent-strong: var(--star-blue-strong);
+  --map-count: var(--star-gold);
 
   /* 媒体类型色 */
-  --map-video: #b2bfc7;
-  --map-image: #64c7e1;
+  --map-video: var(--star-blue);
+  --map-image: var(--star-gold);
 
   /* 几何 */
   --map-radius-sm: 2px;

@@ -949,7 +949,7 @@ watch(windowHeight, () => {
                       xmlns="http://www.w3.org/2000/svg"
                     >
                       <circle cx="12" cy="12" r="10" fill="rgba(0,0,0,0.6)" />
-                      <path d="M10 8L16 12L10 16V8Z" fill="white" />
+                      <path d="M10 8L16 12L10 16V8Z" fill="var(--star-blue)" />
                     </svg>
                   </div>
                 </router-link>
@@ -1038,7 +1038,7 @@ watch(windowHeight, () => {
 .photo-timeline-container {
   display: flex;
   height: 100%;
-  background: #000;
+  background: var(--bg);
   position: relative;
   overflow: hidden;
 }
@@ -1050,7 +1050,7 @@ watch(windowHeight, () => {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  color: #aab0bd;
+  color: var(--muted);
   font-size: 14px;
   text-align: center;
   pointer-events: none;
@@ -1090,15 +1090,15 @@ watch(windowHeight, () => {
 .loading-text,
 .error-text {
   margin-top: 16px;
-  color: #fff;
+  color: var(--text);
   font-size: 14px;
 }
 
 .retry-button {
   margin-top: 16px;
   padding: 8px 24px;
-  background: var(--accent);
-  color: #fff;
+  background: var(--star-gold);
+  color: var(--accent-ink);
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -1106,7 +1106,7 @@ watch(windowHeight, () => {
 }
 
 .retry-button:hover {
-  background: #44aac5;
+  background: var(--star-gold-bright);
 }
 
 .main-content {
@@ -1168,7 +1168,7 @@ watch(windowHeight, () => {
 
 .estimated-count {
   font-size: 12px;
-  color: #999;
+  color: var(--muted);
 }
 
 .photo-grid {
@@ -1226,7 +1226,7 @@ watch(windowHeight, () => {
   flex: 0 0 auto;
   border-radius: 0;
   overflow: hidden;
-  background: #111;
+  background: var(--surface);
   cursor: pointer;
   transition: opacity 0.2s;
   position: relative;
@@ -1317,7 +1317,7 @@ watch(windowHeight, () => {
   right: 16px;
   top: 0;
   font-size: 11px;
-  color: #999;
+  color: var(--accent-warm);
   font-family:
     -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue',
     sans-serif;
@@ -1332,7 +1332,7 @@ watch(windowHeight, () => {
   width: 3px;
   height: 3px;
   border-radius: 50%;
-  background: #d6d6d6;
+  background: var(--accent);
 }
 
 .year-line {
@@ -1392,7 +1392,7 @@ watch(windowHeight, () => {
 .timeline-heading h1 span {
   font: 10px var(--mono);
   letter-spacing: 1px;
-  color: var(--muted);
+  color: var(--accent-warm);
 }
 .month-jump {
   display: flex;

@@ -171,7 +171,7 @@ function onScroll(e: Event) {
   gap: 8px;
   font-size: 15px;
   font-weight: 600;
-  color: var(--map-text-primary);
+  color: var(--map-count);
   font-variant-numeric: tabular-nums;
 }
 
@@ -190,26 +190,26 @@ function onScroll(e: Event) {
   font-size: 11px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface);
   color: var(--map-text-secondary);
   border: 1px solid var(--map-glass-border);
 }
 
 .cluster-drawer .meta-pill.video {
   background: color-mix(in srgb, var(--map-video) 18%, transparent);
-  color: color-mix(in srgb, var(--map-video) 60%, #fff 40%);
+  color: var(--map-video);
   border-color: color-mix(in srgb, var(--map-video) 35%, transparent);
 }
 
 .cluster-drawer .meta-pill.image {
   background: color-mix(in srgb, var(--map-image) 18%, transparent);
-  color: color-mix(in srgb, var(--map-image) 60%, #fff 40%);
+  color: var(--map-image);
   border-color: color-mix(in srgb, var(--map-image) 35%, transparent);
 }
 
 /* 内置 NScrollbar 的 rail 样式微调 */
 .cluster-drawer .n-scrollbar-rail .n-scrollbar-rail__scrollbar {
-  background: rgba(255, 255, 255, 0.18) !important;
+  background: var(--map-glass-border-strong) !important;
 }
 
 .cluster-drawer .media-grid {
@@ -224,7 +224,7 @@ function onScroll(e: Event) {
   border-radius: var(--map-radius-md);
   overflow: hidden;
   cursor: pointer;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--bg);
   transition:
     transform 0.2s ease,
     box-shadow 0.2s ease;
@@ -271,17 +271,17 @@ function onScroll(e: Event) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.65);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: var(--map-glass-bg-strong);
+  color: var(--accent-ink);
+  border: 1px solid var(--map-glass-border);
 }
 
 .cluster-drawer .media-type.video {
-  background: color-mix(in srgb, var(--map-video) 80%, rgba(0, 0, 0, 0.5));
+  background: var(--map-video);
 }
 
 .cluster-drawer .media-type.image {
-  background: color-mix(in srgb, var(--map-image) 80%, rgba(0, 0, 0, 0.5));
+  background: var(--map-image);
 }
 
 .cluster-drawer .status-row {

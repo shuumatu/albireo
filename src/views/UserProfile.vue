@@ -214,9 +214,9 @@ async function handleChangePassword() {
   min-width: 180px;
 }
 .user-avatar {
-  background: var(--surface-raised);
-  color: var(--accent);
-  border: 1px solid var(--line);
+  background: var(--star-gold-soft);
+  color: var(--star-gold);
+  border: 1px solid color-mix(in srgb, var(--star-gold) 40%, var(--line));
   font-size: 28px;
 }
 .profile-container :deep(.n-grid) {

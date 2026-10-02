@@ -128,16 +128,17 @@ const tripRoute = computed(() => {
   display: flex;
   flex-direction: column;
   justify-content: end;
-  color: #edf0ed;
+  color: #f1eee6;
 }
 .trip-month {
   font-size: 22px;
   letter-spacing: 1px;
+  color: var(--star-gold-bright);
 }
 .trip-date-range {
   font: 11px var(--mono);
   margin-top: 8px;
-  color: #bdcbd2;
+  color: #c3cddd;
 }
 .trip-meta {
   display: flex;
@@ -145,7 +146,7 @@ const tripRoute = computed(() => {
   gap: 12px;
   margin-top: 20px;
   padding-top: 12px;
-  border-top: 1px solid #ffffff40;
+  border-top: 1px solid #80b5f460;
   font-size: 12px;
 }
 .place-meta {
@@ -159,8 +160,9 @@ const tripRoute = computed(() => {
   position: absolute;
   top: 12px;
   right: 14px;
-  color: #edf0ed;
+  color: var(--star-blue-bright);
   font-size: 20px;
+  text-shadow: 0 1px 6px #000;
 }
 @media (max-width: 700px) {
   .trip-card {

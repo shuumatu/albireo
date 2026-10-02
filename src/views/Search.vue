@@ -199,7 +199,7 @@ function onFilterChange() {
 }
 /**
  * 把 cosine score 折算成视觉档位。阈值是按 Chinese-CLIP 文本→图像分布拍的：
- *   ≥ 0.30 强相关（绿）
+ *   ≥ 0.30 强相关（金）
  *   0.22~0.30 中相关（蓝，默认）
  *   < 0.22 弱相关（灰，前端基本被 minScore=0.22 砍掉，保留兜底）
  */
@@ -231,7 +231,7 @@ onBeforeUnmount(() => {
   padding: 56px 8% 64px;
 }
 .archive-heading h1 span {
-  color: var(--accent);
+  color: var(--star-gold);
 }
 .search-bar {
   display: flex;
@@ -278,6 +278,12 @@ onBeforeUnmount(() => {
   margin-top: 9px;
   font: 10px var(--mono);
   color: var(--muted);
+}
+.score-high {
+  color: var(--star-gold);
+}
+.score-mid {
+  color: var(--star-blue);
 }
 .skeleton-card {
   background: var(--surface);

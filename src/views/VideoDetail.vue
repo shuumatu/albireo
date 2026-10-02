@@ -133,7 +133,7 @@ onMounted(load)
 }
 .video-stage {
   min-width: 0;
-  background: #080c0e;
+  background: color-mix(in srgb, var(--bg) 60%, black);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -154,6 +154,9 @@ onMounted(load)
   line-height: 1.4;
   overflow-wrap: anywhere;
   margin: 16px 0 20px;
+}
+.video-meta .archive-eyebrow {
+  color: var(--star-gold);
 }
 .video-meta p {
   font-size: 14px;
@@ -185,12 +188,13 @@ onMounted(load)
   padding: 5px 9px;
   border: 1px solid var(--line);
   color: var(--accent);
+  background: var(--star-blue-soft);
   font-size: 12px;
 }
 .meta-note {
   font: 10px var(--mono);
   letter-spacing: 1px;
-  color: var(--muted);
+  color: var(--star-blue);
   margin-top: auto;
   padding-top: 32px;
 }

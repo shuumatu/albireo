@@ -517,11 +517,11 @@ const handleReady = () => {
   background: #000;
 }
 
-/* 绿色主题样式 */
+/* Albireo：金色播放入口，蓝色播放进度。 */
 .theme-archive {
-  --theme-accent: #64c7e1;
-  --theme-accent-dark: #3294ae;
-  --theme-accent-light: #b5e7f3;
+  --theme-accent: var(--star-blue);
+  --theme-accent-dark: var(--star-blue-strong);
+  --theme-accent-light: var(--text);
 }
 
 /* 控制栏尺寸调整 */
@@ -536,10 +536,11 @@ const handleReady = () => {
   width: 3.5em;
 }
 
-/* 大播放按钮 - 绿色 */
+/* 主播放入口 */
 .theme-archive .vjs-big-play-button {
-  background-color: rgba(100, 199, 225, 0.7);
-  border: 0.06666em solid rgba(100, 199, 225, 0.8);
+  background-color: var(--star-gold);
+  color: var(--accent-ink);
+  border: 0.06666em solid var(--star-gold-bright);
   border-radius: 50%;
   width: 2em;
   height: 2em;
@@ -548,9 +549,11 @@ const handleReady = () => {
   transition: all 0.3s;
 }
 
+.theme-archive:hover .vjs-big-play-button,
+.theme-archive .vjs-big-play-button:focus,
 .theme-archive .vjs-big-play-button:hover {
-  background-color: rgba(100, 199, 225, 0.8);
-  border-color: #b5e7f3;
+  background-color: var(--star-gold-bright);
+  border-color: var(--star-gold-bright);
   transform: scale(1.1);
 }
 
@@ -560,57 +563,64 @@ const handleReady = () => {
 }
 
 .theme-archive .vjs-play-progress {
-  background-color: #64c7e1;
+  background-color: var(--star-blue);
 }
 
 .theme-archive .vjs-play-progress:before {
-  color: #b5e7f3;
+  color: var(--star-blue);
   font-size: 1.2em;
-  text-shadow: 0 0 0.5em rgba(100, 199, 225, 0.8);
+  text-shadow: none;
 }
 
 .theme-archive .vjs-load-progress {
-  background: rgba(100, 199, 225, 0.3);
+  background: var(--star-blue-soft);
 }
 
 /* 音量条 */
 .theme-archive .vjs-volume-level {
-  background-color: #64c7e1;
+  background-color: var(--star-blue);
 }
 
 .theme-archive .vjs-volume-level:before {
-  color: #b5e7f3;
+  color: var(--star-blue);
 }
 
 /* 按钮悬停效果 */
 .theme-archive .vjs-control:hover {
-  color: #b5e7f3;
-  text-shadow: 0 0 0.5em rgba(100, 199, 225, 0.5);
+  color: var(--star-blue);
+  text-shadow: none;
+}
+.theme-archive .vjs-control:focus-visible,
+.theme-archive .vjs-big-play-button:focus-visible {
+  outline: 2px solid var(--star-blue);
+  outline-offset: 3px;
 }
 
 /* 菜单背景半透明 */
 .theme-archive .vjs-menu .vjs-menu-content {
-  background-color: rgba(101, 255, 124, 0.1);
+  background-color: var(--surface);
+  border: 1px solid var(--line);
 }
 
 /* 菜单项选中状态 */
 .theme-archive .vjs-menu li.vjs-selected,
 .theme-archive .vjs-menu li.vjs-selected:focus,
 .theme-archive .vjs-menu li.vjs-selected:hover {
-  background-color: rgba(100, 199, 225, 0.6);
-  color: #fff;
+  background-color: var(--star-gold-soft);
+  color: var(--star-gold);
 }
 
 /* 菜单项悬停 */
 .theme-archive .vjs-menu li:hover {
-  background-color: rgba(100, 199, 225, 0.3);
+  background-color: var(--star-blue-soft);
+  color: var(--star-blue);
 }
 
 /* 时间提示 */
 .theme-archive .vjs-time-tooltip,
 .theme-archive .vjs-mouse-display .vjs-time-tooltip {
-  background-color: rgba(100, 199, 225, 0.9);
-  color: #fff;
+  background-color: var(--star-blue);
+  color: var(--accent-ink);
   border-radius: 0;
 }
 
@@ -638,13 +648,13 @@ const handleReady = () => {
 }
 
 .theme-archive .vjs-quality-menu-button .vjs-menu .vjs-menu-item.vjs-selected {
-  background-color: rgba(100, 199, 225, 0.6);
-  color: #fff;
+  background-color: var(--star-gold-soft);
+  color: var(--star-gold);
 }
 
 .vjs-quality-menu-button .vjs-menu .vjs-menu-item.vjs-selected::before {
   content: '✓ ';
-  color: #b5e7f3;
+  color: var(--star-gold);
 }
 
 /* 确保播放速度按钮显示 */

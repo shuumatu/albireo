@@ -428,6 +428,8 @@ function drawDensity() {
 
   const barW = rect.width / buckets.length
   const baseR = Math.min(2, barW / 2)
+  // Canvas 不继承 CSS 变量，读取轨道已解析的主题色，保持密度图与界面一致。
+  const densityColor = getComputedStyle(track).color
   for (let i = 0; i < buckets.length; i++) {
     if (buckets[i] === 0) continue
     const t = buckets[i] / maxCount
@@ -435,8 +437,9 @@ function drawDensity() {
     const y = rect.height - barH
     // 顶部圆角：用 fill + path roundRect (Chromium 99+ 普及)
     const grad = ctx.createLinearGradient(0, y, 0, rect.height)
-    grad.addColorStop(0, `rgba(100, 199, 225, ${(0.55 + t * 0.4).toFixed(3)})`)
-    grad.addColorStop(1, `rgba(100, 199, 225, ${(0.18 + t * 0.32).toFixed(3)})`)
+    grad.addColorStop(0, densityColor)
+    grad.addColorStop(1, 'transparent')
+    ctx.globalAlpha = 0.55 + t * 0.4
     ctx.fillStyle = grad
 
     if (typeof ctx.roundRect === 'function') {
@@ -452,6 +455,7 @@ function drawDensity() {
       ctx.fillRect(i * barW, y, Math.max(1, barW - 1), barH)
     }
   }
+  ctx.globalAlpha = 1
 }
 
 let resizeObserver: ResizeObserver | null = null
@@ -589,7 +593,7 @@ function formatDateFull(ts: number): string {
   align-items: center;
   gap: 4px;
   padding: 3px 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface);
   border: 1px solid var(--map-glass-border);
   border-radius: var(--map-radius-pill);
   font-size: 11px;
@@ -600,13 +604,13 @@ function formatDateFull(ts: number): string {
 }
 
 .stat.video {
-  color: color-mix(in srgb, var(--map-video) 60%, #fff 40%);
+  color: var(--map-video);
   background: color-mix(in srgb, var(--map-video) 14%, transparent);
   border-color: color-mix(in srgb, var(--map-video) 30%, transparent);
 }
 
 .stat.image {
-  color: color-mix(in srgb, var(--map-image) 60%, #fff 40%);
+  color: var(--map-image);
   background: color-mix(in srgb, var(--map-image) 14%, transparent);
   border-color: color-mix(in srgb, var(--map-image) 30%, transparent);
 }
@@ -629,8 +633,8 @@ function formatDateFull(ts: number): string {
 }
 
 .collapse-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--map-text-primary);
+  background: var(--map-accent-soft);
+  color: var(--map-accent);
 }
 
 .timeline-body {
@@ -640,12 +644,13 @@ function formatDateFull(ts: number): string {
 .timeline-track-wrap {
   border-radius: var(--map-radius-sm);
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg);
 }
 
 .timeline-track {
   position: relative;
   height: 44px;
+  color: var(--map-accent);
   user-select: none;
   touch-action: none;
 }
@@ -663,21 +668,21 @@ function formatDateFull(ts: number): string {
   position: absolute;
   top: 0;
   bottom: 0;
-  background: rgba(100, 199, 225, 0.1);
+  background: color-mix(in srgb, var(--map-accent) 10%, transparent);
   cursor: grab;
   z-index: 1;
-  border-top: 1px solid rgba(100, 199, 225, 0.45);
-  border-bottom: 1px solid rgba(100, 199, 225, 0.45);
+  border-top: 1px solid color-mix(in srgb, var(--map-accent) 45%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--map-accent) 45%, transparent);
   transition: background 0.15s ease;
 }
 
 .timeline-selection:hover {
-  background: rgba(100, 199, 225, 0.18);
+  background: color-mix(in srgb, var(--map-accent) 18%, transparent);
 }
 
 .timeline-selection:active {
   cursor: grabbing;
-  background: rgba(100, 199, 225, 0.24);
+  background: color-mix(in srgb, var(--map-accent) 24%, transparent);
 }
 
 .selection-glow {
@@ -687,7 +692,7 @@ function formatDateFull(ts: number): string {
   background: linear-gradient(
     180deg,
     transparent 0%,
-    rgba(100, 199, 225, 0.12) 100%
+    var(--map-accent-soft) 100%
   );
 }
 
@@ -711,7 +716,7 @@ function formatDateFull(ts: number): string {
   bottom: 0;
   width: 2px;
   transform: translateX(-50%);
-  background: #fff;
+  background: var(--map-accent);
   border-radius: 1px;
   box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
   transition:
@@ -729,7 +734,7 @@ function formatDateFull(ts: number): string {
   transform: translate(-50%, -50%);
   background: var(--map-accent);
   border-radius: 4px;
-  border: 2px solid #fff;
+  border: 2px solid var(--map-glass-bg-strong);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
   transition:
     transform 0.15s ease,
@@ -741,7 +746,7 @@ function formatDateFull(ts: number): string {
   transform: translate(-50%, -50%) scale(1.12);
   box-shadow:
     0 3px 10px rgba(0, 0, 0, 0.55),
-    0 0 0 4px rgba(100, 199, 225, 0.22);
+    0 0 0 4px var(--map-accent-soft);
 }
 
 .timeline-handle:hover .handle-bar,
@@ -811,16 +816,16 @@ function formatDateFull(ts: number): string {
   position: fixed;
   transform: translateX(-50%);
   pointer-events: none;
-  background: rgba(18, 18, 18, 0.92);
+  background: var(--map-glass-bg-strong);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
-  color: #fff;
+  color: var(--map-text-primary);
   padding: 6px 10px;
   border-radius: 8px;
   font-size: 12px;
   white-space: nowrap;
   z-index: 9999;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--map-glass-border-strong);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
   display: flex;
   flex-direction: column;
@@ -837,9 +842,9 @@ function formatDateFull(ts: number): string {
   transform: translateX(-50%) rotate(45deg);
   width: 8px;
   height: 8px;
-  background: rgba(18, 18, 18, 0.92);
-  border-right: 1px solid rgba(255, 255, 255, 0.12);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--map-glass-bg-strong);
+  border-right: 1px solid var(--map-glass-border-strong);
+  border-bottom: 1px solid var(--map-glass-border-strong);
 }
 
 .tooltip-label {

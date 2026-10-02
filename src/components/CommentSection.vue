@@ -471,12 +471,12 @@ onMounted(() => {
 }
 
 .cs-title svg {
-  color: var(--accent);
+  color: var(--star-gold);
 }
 
 .cs-count {
   font-weight: 400;
-  color: var(--muted);
+  color: var(--star-gold);
   font-size: 15px;
 }
 
@@ -493,8 +493,8 @@ onMounted(() => {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent), #477887);
-  color: var(--surface);
+  background: var(--star-blue-soft);
+  color: var(--star-blue);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -580,11 +580,11 @@ onMounted(() => {
 }
 
 .cs-btn-primary {
-  background: var(--accent);
-  color: var(--surface);
+  background: var(--star-gold);
+  color: var(--accent-ink);
 }
 .cs-btn-primary:not(:disabled):hover {
-  background: #44aac5;
+  background: var(--star-gold-bright);
 }
 
 .cs-btn-ghost {
@@ -618,7 +618,7 @@ onMounted(() => {
 }
 
 .cs-btn-text:hover {
-  color: #44aac5;
+  color: var(--text);
 }
 
 .cs-btn-text:disabled {
@@ -741,8 +741,8 @@ onMounted(() => {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent), #477887);
-  color: var(--surface);
+  background: var(--star-blue-soft);
+  color: var(--star-blue);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -816,12 +816,12 @@ onMounted(() => {
 }
 .cs-compose-avatar,
 .cs-avatar {
-  background: var(--surface-raised);
-  color: var(--accent);
+  background: var(--star-blue-soft);
+  color: var(--star-blue);
   border: 1px solid var(--line);
 }
 .cs-btn-primary {
-  background: var(--accent);
+  background: var(--star-gold);
   color: var(--accent-ink);
   min-height: 44px;
 }

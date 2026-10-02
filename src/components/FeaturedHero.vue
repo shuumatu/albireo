@@ -315,7 +315,7 @@ onBeforeUnmount(() => {
   top: 50%;
   z-index: 1;
   display: grid;
-  color: #d5f6ff;
+  color: #d9e9ff;
   opacity: 0;
   transform: translateY(-50%);
   transition: opacity 160ms ease;
@@ -371,9 +371,9 @@ onBeforeUnmount(() => {
   bottom: 0;
   left: 8%;
   font-size: 12px;
-  background: #101416dc;
+  background: #10151fdc;
   padding: 6px 12px;
-  color: #edf0ed;
+  color: var(--text);
 }
 .hero-error button {
   background: none;
@@ -411,7 +411,7 @@ onBeforeUnmount(() => {
   text-shadow: 0 1px 8px #0008;
 }
 .hero-caption > .mono {
-  color: #b8c8d0;
+  color: var(--star-gold-bright);
 }
 .hero-bottom h2 {
   margin: 9px 0 8px;
@@ -471,7 +471,7 @@ onBeforeUnmount(() => {
   top: 50%;
   width: 28px;
   height: 32px;
-  background: linear-gradient(90deg, #64c7e11c, #64c7e108);
+  background: linear-gradient(90deg, var(--star-blue-soft), #80b5f408);
   opacity: 0;
   transform: translate(-50%, -50%) skewX(-24deg) scaleY(0.7);
   transition:
@@ -486,7 +486,7 @@ onBeforeUnmount(() => {
   left: 50%;
   width: 16px;
   height: 1px;
-  background: var(--accent);
+  background: var(--accent-warm);
   opacity: 0;
   transform: translateX(-50%) scaleX(0.4);
   transition:
@@ -500,7 +500,7 @@ onBeforeUnmount(() => {
   width: 3px;
   height: 18px;
   transform: skewX(-24deg);
-  background: #d7e4e9a6;
+  background: #d4e2f5a6;
   transition:
     width 0.22s cubic-bezier(0.2, 0.7, 0.2, 1),
     height 0.22s,
@@ -516,7 +516,7 @@ onBeforeUnmount(() => {
   height: 24px;
   background: linear-gradient(
     90deg,
-    #d5f6ff 0 2px,
+    var(--star-gold) 0 2px,
     transparent 2px 5px,
     var(--accent) 5px
   );
@@ -567,7 +567,7 @@ onBeforeUnmount(() => {
   font-family: Arial, sans-serif;
   font-weight: 700;
   letter-spacing: -2px;
-  color: var(--accent);
+  color: var(--accent-warm);
 }
 .frame-count .frame-total {
   font-size: 12px;

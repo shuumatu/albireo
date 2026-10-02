@@ -101,6 +101,7 @@ onBeforeUnmount(() => window.removeEventListener('storage', syncLoginState))
   color: var(--muted);
 }
 .brand-mark {
+  color: var(--accent-warm);
   font: bold 43px/1 Arial;
   letter-spacing: -9px;
   transform: skewX(-7deg);
@@ -131,7 +132,7 @@ nav small {
   color: var(--muted);
 }
 nav a[aria-current] {
-  color: var(--accent);
+  color: var(--accent-warm);
 }
 nav a[aria-current]:after {
   content: '';
@@ -139,9 +140,18 @@ nav a[aria-current]:after {
   bottom: 0;
   width: 24px;
   height: 3px;
-  background: var(--accent);
+  background: linear-gradient(
+    90deg,
+    var(--accent-warm) 0 16px,
+    transparent 16px 20px,
+    var(--accent) 20px
+  );
 }
 nav a:hover {
+  color: var(--accent);
+}
+.login-link:hover,
+.account-button:hover {
   color: var(--accent);
 }
 .account {

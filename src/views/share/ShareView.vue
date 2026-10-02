@@ -230,10 +230,25 @@ async function submitPassword() {
 .brand-name {
   font: 700 20px var(--mono);
   letter-spacing: 3px;
+  position: relative;
+  padding-left: 34px;
+}
+.brand-name::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--star-gold);
+  box-shadow: 14px -4px 0 -1px var(--star-blue);
+  transform: translateY(-50%);
 }
 .topbar-tag {
   font: 10px var(--mono);
   letter-spacing: 2px;
+  color: var(--star-blue);
 }
 .share-center {
   flex: 1;
@@ -254,14 +269,14 @@ async function submitPassword() {
   padding: 20px 8px;
 }
 .password-icon {
-  color: var(--accent);
+  color: var(--star-gold);
   width: 72px;
   height: 72px;
   display: grid;
   place-items: center;
   margin: auto;
   border: 1px solid var(--line);
-  background: var(--surface-raised);
+  background: var(--star-gold-soft);
 }
 .password-title {
   font-size: 20px;
@@ -288,7 +303,7 @@ async function submitPassword() {
   padding: 56px 32px;
 }
 .share-header {
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--star-gold);
   padding-left: 24px;
   margin-bottom: 36px;
 }

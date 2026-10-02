@@ -115,8 +115,8 @@ defineEmits<{
 }
 
 .tool-btn:hover {
-  color: var(--map-text-primary);
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--map-accent);
+  background: var(--map-accent-soft);
 }
 
 .tool-btn:active {

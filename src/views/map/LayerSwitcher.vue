@@ -71,8 +71,8 @@ defineEmits<{
 }
 
 .layer-btn:hover {
-  color: var(--map-text-primary);
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--map-accent);
+  background: var(--map-accent-soft);
 }
 
 .layer-btn:active {
@@ -81,7 +81,7 @@ defineEmits<{
 
 .layer-btn.active {
   background: var(--map-accent-soft);
-  color: #fff;
+  color: var(--map-accent);
   box-shadow: inset 0 0 0 1px var(--map-accent-strong);
 }
 

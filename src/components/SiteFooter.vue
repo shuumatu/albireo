@@ -22,7 +22,7 @@
   font-size: 24px;
   font-weight: 750;
   letter-spacing: 3px;
-  color: var(--text);
+  color: var(--accent-warm);
 }
 .footer-brand span {
   color: var(--accent);

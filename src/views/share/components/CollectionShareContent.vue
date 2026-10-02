@@ -59,8 +59,8 @@
           </div>
           <div v-if="collectionType === 'video'" class="play-overlay">
             <svg viewBox="0 0 24 24" width="36" height="36">
-              <circle cx="12" cy="12" r="11" fill="rgba(0,0,0,0.55)" />
-              <path d="M10 8l6 4-6 4z" fill="#fff" />
+              <circle cx="12" cy="12" r="11" fill="var(--star-gold)" />
+              <path d="M10 8l6 4-6 4z" fill="var(--accent-ink)" />
             </svg>
           </div>
         </div>
@@ -226,12 +226,13 @@ function formatDate(dateStr: string) {
 .item-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  border-color: var(--star-blue);
 }
 
 .item-cover {
   position: relative;
   width: 100%;
-  background: #0e0e12;
+  background: var(--bg);
 }
 
 .items-grid--image .item-cover {
@@ -254,7 +255,7 @@ function formatDate(dateStr: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--muted);
   font-size: 12px;
 }
 

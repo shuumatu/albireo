@@ -146,10 +146,13 @@ onMounted(() => {
   scroll-margin-top: 24px;
   --text: var(--paper-ink);
   --muted: var(--paper-muted);
-  --surface: #dce1df;
-  --line: #a7b4b9;
-  --accent: #2a748b;
-  --accent-ink: #fff;
+  --surface: #e5e0d5;
+  --surface-raised: #e0e5ea;
+  --line: #b3b7ba;
+  --accent: var(--paper-blue);
+  --accent-warm: var(--paper-gold);
+  --accent-soft: rgba(44, 96, 151, 0.1);
+  --accent-warm-soft: rgba(128, 89, 29, 0.1);
 }
 .selected-area:focus {
   outline: none;
@@ -173,7 +176,7 @@ onMounted(() => {
   height: 5px;
   background: repeating-linear-gradient(
     90deg,
-    #74929f 0 1px,
+    var(--accent) 0 1px,
     transparent 1px 9px
   );
 }
@@ -196,9 +199,9 @@ p {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border: 1px solid #52697040;
+  border: 1px solid #2c609740;
   border-radius: 50%;
-  color: #477887;
+  color: var(--accent);
   margin-right: 16px;
   flex-shrink: 0;
 }
@@ -206,7 +209,7 @@ p {
   content: '';
   position: absolute;
   inset: 9px;
-  border: 1px solid #52697080;
+  border: 1px solid #80591d80;
   border-left-color: transparent;
   border-right-color: transparent;
   border-radius: 50%;
@@ -217,10 +220,12 @@ p {
   position: absolute;
   right: -6px;
   font: 17px var(--mono);
+  color: var(--accent-warm);
 }
 .chapter-orbit small {
   font: 9px var(--mono);
   letter-spacing: 2px;
+  color: var(--accent-warm);
 }
 .chapter-orbit strong {
   font: 64px Arial;
@@ -234,6 +239,10 @@ p {
   min-height: 44px;
   font-size: 14px;
   border-bottom: 1px solid;
+  color: var(--accent);
+}
+.section-link:hover {
+  color: var(--accent-warm);
 }
 .journey-intro {
   border-top: 1px solid var(--line);
@@ -247,10 +256,6 @@ p {
 .journey-intro h2 {
   font-size: 28px;
   margin: 12px 0;
-}
-.journey-intro .primary {
-  background: var(--paper-ink);
-  color: var(--paper);
 }
 .popular-area {
   padding: 32px 8% 56px;

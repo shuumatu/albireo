@@ -199,7 +199,7 @@ onBeforeUnmount(() => {
 }
 .image-stage {
   position: relative;
-  background: #080c0e;
+  background: color-mix(in srgb, var(--bg) 60%, black);
   min-height: 480px;
   display: flex;
   align-items: center;
@@ -225,7 +225,7 @@ onBeforeUnmount(() => {
   position: absolute;
   bottom: 20px;
   right: 20px;
-  background: #172126ed;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
   padding: 10px 16px;
   border: 1px solid var(--line);
   font-size: 12px;
@@ -242,7 +242,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  background: #080c0e;
+  background: color-mix(in srgb, var(--bg) 60%, black);
   color: var(--muted);
 }
 .detail-meta {
@@ -258,6 +258,9 @@ onBeforeUnmount(() => {
   line-height: 1.4;
   margin: 16px 0 20px;
   overflow-wrap: anywhere;
+}
+.detail-meta .archive-eyebrow {
+  color: var(--star-gold);
 }
 .description {
   font-size: 14px;
@@ -298,7 +301,7 @@ summary {
 .meta-footnote {
   font: 10px var(--mono);
   letter-spacing: 1px;
-  color: var(--muted);
+  color: var(--star-blue);
   margin-top: auto;
   padding-top: 32px;
 }
@@ -316,12 +319,12 @@ summary {
   max-height: 94dvh;
   margin: auto;
   padding: 0;
-  background: #080c0e;
+  background: color-mix(in srgb, var(--bg) 60%, black);
   color: var(--text);
   border: 1px solid var(--line);
 }
 .image-lightbox::backdrop {
-  background: #04080aed;
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
 }
 .lightbox-toolbar {
   display: flex;

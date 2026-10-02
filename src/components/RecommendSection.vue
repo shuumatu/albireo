@@ -159,9 +159,10 @@ watch(
   bottom: 0;
   width: 3px;
   background: linear-gradient(
-    var(--accent) 0 12px,
+    var(--accent-warm) 0 12px,
     transparent 12px 17px,
-    var(--line) 17px
+    var(--accent) 17px 24px,
+    var(--line) 24px
   );
 }
 .section-title {
