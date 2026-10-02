@@ -44,8 +44,6 @@ defineEmits<{
 </script>
 
 <style scoped>
-@import './mapTokens.css';
-
 .layer-switcher {
   display: inline-flex;
   align-items: center;
@@ -55,8 +53,8 @@ defineEmits<{
 }
 
 .layer-btn {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -66,7 +64,10 @@ defineEmits<{
   color: var(--map-text-secondary);
   cursor: pointer;
   padding: 0;
-  transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease;
 }
 
 .layer-btn:hover {

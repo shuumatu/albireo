@@ -1,17 +1,15 @@
 <template>
   <n-card :bordered="false">
     <div class="video-container">
-      <video
-        controls
-        :poster="content.coverUrl"
-        class="share-video"
-      >
+      <video controls :poster="content.coverUrl" class="share-video">
         <source :src="videoSrc" />
       </video>
     </div>
     <n-space vertical :size="12" style="margin-top: 16px">
       <n-h3 v-if="content.title" style="margin: 0">{{ content.title }}</n-h3>
-      <n-text v-if="content.description" depth="2">{{ content.description }}</n-text>
+      <n-text v-if="content.description" depth="2">{{
+        content.description
+      }}</n-text>
       <n-space v-if="content.tags?.length" :size="8">
         <n-tag v-for="tag in content.tags" :key="tag.id" size="small" round>
           {{ tag.name }}
@@ -25,6 +23,7 @@
 </template>
 
 <script setup lang="ts">
+import { NCard, NSpace, NH3, NText, NTag } from 'naive-ui'
 import { computed } from 'vue'
 
 const props = defineProps<{
@@ -44,7 +43,9 @@ const videoSrc = computed(() => props.content.sourceUrl || '')
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('zh-CN', {
-    year: 'numeric', month: 'long', day: 'numeric'
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
   })
 }
 </script>
@@ -53,7 +54,7 @@ function formatDate(dateStr: string) {
 .video-container {
   position: relative;
   width: 100%;
-  border-radius: 8px;
+  border-radius: 0;
   overflow: hidden;
   background: #000;
 }

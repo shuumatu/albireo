@@ -1,18 +1,23 @@
 <template>
   <div class="search-page">
+    <header class="archive-heading">
+      <span class="archive-eyebrow">04 / VISUAL SEARCH</span>
+      <h1>寻找脑海中的画面<span>。</span></h1>
+      <p>用一句描述，找回记忆中的光线、地点与片刻。</p>
+    </header>
     <!-- 顶部搜索条（独立于全局 header 之外，更醒目，而且支持回车直接搜） -->
     <div class="search-bar">
       <n-input
         v-model:value="localQuery"
         placeholder="试试：海边日落 / 雪山日出 / 城市夜景"
         clearable
-        round
         size="large"
         class="big-search"
+        :input-props="{ 'aria-label': '描述想寻找的画面' }"
         @keydown.enter="performSearch"
       >
         <template #prefix>
-          <span class="search-icon">🔍</span>
+          <span class="search-icon" aria-hidden="true">⌕</span>
         </template>
       </n-input>
       <n-button
@@ -28,7 +33,11 @@
 
     <!-- 类型筛选 -->
     <div class="filter-bar">
-      <n-radio-group v-model:value="typeFilter" size="small" @update:value="onFilterChange">
+      <n-radio-group
+        v-model:value="typeFilter"
+        size="small"
+        @update:value="onFilterChange"
+      >
         <n-radio-button value="all">全部</n-radio-button>
         <n-radio-button value="image">图片</n-radio-button>
         <n-radio-button value="video">视频</n-radio-button>
@@ -39,7 +48,12 @@
     </div>
 
     <!-- 结果区 -->
-    <n-alert v-if="degraded && !loading && !error" type="warning" :show-icon="false" style="margin-bottom: 16px">
+    <n-alert
+      v-if="degraded && !loading && !error"
+      type="warning"
+      :show-icon="false"
+      style="margin-bottom: 16px"
+    >
       视觉搜索暂时繁忙或不可用，目前显示标题与描述的关键词匹配结果。
     </n-alert>
     <div class="result-area">
@@ -60,7 +74,9 @@
       <!-- 空态：还没搜过 -->
       <div v-else-if="!lastQuery" class="empty-state">
         <p class="hint-title">输入一段描述，按视觉相似度找内容</p>
-        <p class="hint-sub">支持中文自然语言，比如「海边日落」「樱花树下」「下雨的街道」</p>
+        <p class="hint-sub">
+          支持中文自然语言，比如「海边日落」「樱花树下」「下雨的街道」
+        </p>
       </div>
 
       <!-- 空态：搜过但无结果 -->
@@ -86,9 +102,13 @@
           <span
             class="score-badge"
             :class="scoreBadgeClass(item.score)"
-            :title="item.matchType === 'keyword' ? '标题或描述命中关键词' : `视觉相似度 ${item.score.toFixed(3)}`"
+            :title="
+              item.matchType === 'keyword'
+                ? '标题或描述命中关键词'
+                : `视觉相似度 ${item.score.toFixed(3)}`
+            "
           >
-            {{ item.matchType === 'keyword' ? '关键词' : Math.round(item.score * 100) + '%' }}
+            {{ item.matchType === 'keyword' ? '关键词' : '相近画面' }}
           </span>
         </div>
       </div>
@@ -97,7 +117,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import {
+  NInput,
+  NButton,
+  NRadioGroup,
+  NRadioButton,
+  NAlert,
+  NSkeleton
+} from 'naive-ui'
+import { ref, watch, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MediaCard from '../components/MediaCard.vue'
 import { searchByText, type SearchItemVO } from '../api/search'
@@ -105,51 +133,70 @@ import { searchByText, type SearchItemVO } from '../api/search'
 const route = useRoute()
 const router = useRouter()
 
-const localQuery = ref<string>(typeof route.query.q === 'string' ? route.query.q : '')
+const localQuery = ref<string>(
+  typeof route.query.q === 'string' ? route.query.q : ''
+)
 const lastQuery = ref<string>('')
 const loading = ref(false)
 const error = ref<string | null>(null)
 const degraded = ref(false)
 const results = ref<SearchItemVO[]>([])
-const typeFilter = ref<'all' | 'image' | 'video'>('all')
-
-/**
- * 真正发请求。query 从 URL 拿（避免被本地输入双向绑定立刻覆盖），
- * 这样浏览器后退/前进、复制链接分享都能复现搜索结果。
- */
+const readType = () =>
+  route.query.type === 'image' || route.query.type === 'video'
+    ? route.query.type
+    : 'all'
+const typeFilter = ref<'all' | 'image' | 'video'>(readType())
+let requestId = 0
 async function runSearch(query: string) {
-  if (!query) return
+  const id = ++requestId
+  if (!query) {
+    results.value = []
+    lastQuery.value = ''
+    error.value = null
+    degraded.value = false
+    loading.value = false
+    return
+  }
   loading.value = true
   error.value = null
+  lastQuery.value = query
   try {
-    const types =
-      typeFilter.value === 'all' ? undefined : [typeFilter.value as 'image' | 'video']
-    const response = await searchByText({ query, types, limit: 60 })
+    const response = await searchByText({
+      query,
+      types: typeFilter.value === 'all' ? undefined : [typeFilter.value],
+      limit: 60
+    })
+    if (id !== requestId) return
     results.value = response.items
     degraded.value = response.mode === 'keyword_fallback'
-    lastQuery.value = query
-  } catch (e: any) {
-    console.error('search failed', e)
-    error.value = e?.message || '请求失败'
+  } catch {
+    if (id !== requestId) return
+    error.value = '连接暂时不可用，请稍后重试'
     results.value = []
   } finally {
-    loading.value = false
+    if (id === requestId) loading.value = false
   }
 }
-
 function performSearch() {
   const q = localQuery.value.trim()
   if (!q) return
-  // 推到 URL 上，由 watch(route.query.q) 触发实际搜索；保证可分享/可后退
-  router.push({ name: 'Search', query: { q } })
-}
-
-function onFilterChange() {
-  if (lastQuery.value) {
-    runSearch(lastQuery.value)
+  const query = {
+    q,
+    ...(typeFilter.value === 'all' ? {} : { type: typeFilter.value })
   }
+  if (q === route.query.q && readType() === typeFilter.value) void runSearch(q)
+  else router.push({ name: 'Search', query })
 }
-
+function onFilterChange() {
+  const q = localQuery.value.trim()
+  router.push({
+    name: 'Search',
+    query: {
+      ...(q ? { q } : {}),
+      ...(typeFilter.value === 'all' ? {} : { type: typeFilter.value })
+    }
+  })
+}
 /**
  * 把 cosine score 折算成视觉档位。阈值是按 Chinese-CLIP 文本→图像分布拍的：
  *   ≥ 0.30 强相关（绿）
@@ -163,146 +210,118 @@ function scoreBadgeClass(score: number): string {
 }
 
 watch(
-  () => route.query.q,
-  (q) => {
-    if (typeof q === 'string' && q.trim()) {
-      localQuery.value = q
-      runSearch(q.trim())
-    } else {
-      results.value = []
-      lastQuery.value = ''
-    }
-  }
+  () => [route.query.q, route.query.type],
+  () => {
+    localQuery.value = typeof route.query.q === 'string' ? route.query.q : ''
+    typeFilter.value = readType()
+    void runSearch(localQuery.value.trim())
+  },
+  { immediate: true }
 )
-
-onMounted(() => {
-  if (localQuery.value.trim()) {
-    runSearch(localQuery.value.trim())
-  }
+onBeforeUnmount(() => {
+  requestId++
 })
 </script>
 
 <style scoped>
 .search-page {
-  min-height: calc(100vh - 64px);
-  padding: 32px 48px 64px;
-  background-color: #0a0a0a;
-  color: #fff;
+  min-height: calc(100dvh - var(--header-height));
+  max-width: 1560px;
+  margin: auto;
+  padding: 56px 8% 64px;
 }
-
+.archive-heading h1 span {
+  color: var(--accent);
+}
 .search-bar {
   display: flex;
   gap: 12px;
-  max-width: 760px;
-  margin: 0 auto 16px;
+  max-width: 800px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--accent);
+  margin: 28px 0 20px;
 }
-
 .big-search {
   flex: 1;
-  --n-color: rgba(255, 255, 255, 0.06);
-  --n-color-focus: rgba(255, 255, 255, 0.12);
-  --n-text-color: white;
-  --n-placeholder-color: rgba(255, 255, 255, 0.5);
-  --n-border: 1px solid rgba(255, 255, 255, 0.15);
-  --n-border-focus: 1px solid rgba(255, 255, 255, 0.4);
+  min-width: 0;
 }
-
 .search-icon {
-  font-size: 16px;
-  opacity: 0.6;
-  margin-right: 6px;
+  font-size: 22px;
+  color: var(--accent);
 }
-
 .filter-bar {
   display: flex;
   align-items: center;
-  gap: 16px;
-  max-width: 760px;
-  margin: 0 auto 24px;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 32px;
 }
-
 .result-meta {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--muted);
   font-size: 13px;
 }
-
-.result-area {
-  max-width: 1400px;
-  margin: 0 auto;
-}
-
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 28px 24px;
 }
-
 .card-wrapper {
   position: relative;
+  min-width: 0;
 }
-
+.card-wrapper :deep(.media-card) {
+  width: 100%;
+}
 .score-badge {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background-color: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
-  font-size: 11px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.85);
-  pointer-events: auto;
-  cursor: help;
-  border: 1px solid transparent;
+  display: block;
+  width: fit-content;
+  margin-top: 9px;
+  font: 10px var(--mono);
+  color: var(--muted);
 }
-
-.score-high {
-  color: #58e1a4;
-  border-color: rgba(88, 225, 164, 0.4);
-}
-
-.score-mid {
-  color: #7cb8ff;
-  border-color: rgba(124, 184, 255, 0.3);
-}
-
-.score-low {
-  color: rgba(255, 255, 255, 0.5);
-}
-
 .skeleton-card {
-  background-color: #1a1a1a;
-  padding: 8px;
-  border-radius: 10px;
+  background: var(--surface);
+  padding: 12px;
 }
-
 .empty-state {
+  padding: 56px 24px;
+  border: 1px solid var(--line);
+  color: var(--muted);
   text-align: center;
-  padding: 80px 16px;
-  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.8;
 }
-
 .hint-title {
   font-size: 18px;
-  margin-bottom: 8px;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--text);
 }
-
 .hint-sub {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.5);
 }
-
-@media (max-width: 640px) {
+.hint-sub,
+.hint-title {
+  margin: 8px 0;
+}
+@media (max-width: 850px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
   .search-page {
-    padding: 24px 16px 48px;
+    padding: 36px 24px;
   }
-
+  .search-bar {
+    gap: 8px;
+  }
+  .grid {
+    gap: 24px 16px;
+  }
   .filter-bar {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
+    gap: 12px;
+  }
+  .hint-title {
+    font-size: 16px;
   }
 }
+.filter-bar :deep(.n-radio-button){min-height:44px;display:inline-flex;align-items:center}
 </style>

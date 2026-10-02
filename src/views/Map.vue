@@ -1,5 +1,9 @@
 <template>
-  <div class="map-wrapper" ref="wrapperRef" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+  <div
+    class="map-wrapper"
+    ref="wrapperRef"
+    :class="{ 'sidebar-collapsed': sidebarCollapsed }"
+  >
     <MapSidebar
       :entries="filteredEntries"
       :hovered-id="hoveredEntryId"
@@ -20,7 +24,10 @@
       :title="sidebarCollapsed ? '展开侧栏 (])' : '收起侧栏 ([)'"
       @click="toggleSidebar"
     >
-      <n-icon :component="sidebarCollapsed ? ChevronForward : ChevronBack" :size="16" />
+      <n-icon
+        :component="sidebarCollapsed ? ChevronForward : ChevronBack"
+        :size="16"
+      />
     </button>
 
     <div class="map-stage">
@@ -46,12 +53,26 @@
 
       <Transition name="chip-fade">
         <div v-if="loading" class="loading-chip glass-panel">
-          <n-spin size="small" stroke="#18a058" />
+          <n-spin size="small" stroke="#64c7e1" />
           <span>正在加载视口…</span>
         </div>
       </Transition>
 
+      <div
+        v-if="mapError || dataError"
+        class="map-error glass-panel"
+        role="status"
+      >
+        <span>{{ mapError || '作品暂时无法加载' }}</span
+        ><button
+          :disabled="isInitializingMap"
+          @click="mapError ? initializeMap() : fetchAggregation()"
+        >
+          {{ isInitializingMap ? '正在重试…' : '重试' }}
+        </button>
+      </div>
       <MapTimeline
+        v-if="hasTimeRange && (!mobileViewport || sidebarCollapsed)"
         :global-min-time="globalMinTime"
         :global-max-time="globalMaxTime"
         :range-start="rangeStart"
@@ -82,7 +103,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, shallowRef, watch } from 'vue'
+import {
+  ref,
+  computed,
+  onMounted,
+  onUnmounted,
+  nextTick,
+  shallowRef,
+  watch
+} from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
@@ -94,14 +123,18 @@ import {
   MapOutline,
   EarthOutline,
   ChevronForward,
-  ChevronBack,
+  ChevronBack
 } from '@vicons/ionicons5'
 
 import { getMapAggregation, getClusterMedia } from '../api/map'
 import type { MapPointVO, MapClusterVO } from '../api/map'
 import { gcj02ToWgs84, wgs84ToGcj02 } from '../utils/coordTransform'
+import { fetchMapStyle, mapInitializationMessage } from '../utils/mapLoading'
 
-import MapSidebar, { type SidebarEntry, type EntryFilter } from './map/MapSidebar.vue'
+import MapSidebar, {
+  type SidebarEntry,
+  type EntryFilter
+} from './map/MapSidebar.vue'
 import MapTimeline from './map/MapTimeline.vue'
 import LayerSwitcher, { type BaseLayerOption } from './map/LayerSwitcher.vue'
 import MapToolbar from './map/MapToolbar.vue'
@@ -114,7 +147,13 @@ const wrapperRef = ref<HTMLDivElement | null>(null)
 const timelineRef = ref<InstanceType<typeof MapTimeline> | null>(null)
 
 let map: maplibregl.Map | null = null
-const activeLayer = ref('protomaps-light')
+const activeLayer = ref('protomaps-dark')
+const mapError = ref('')
+const isInitializingMap = ref(false)
+const dataError = ref(false)
+const hasTimeRange = ref(false)
+const mobileViewport = ref(window.innerWidth < 720)
+let disposed = false
 
 /**
  * 从「旅途回忆」卡片跳过来时，URL 带有 ?bboxMinLng&bboxMinLat&bboxMaxLng&bboxMaxLat&start&end，
@@ -131,8 +170,18 @@ type BaseLayer =
   | { id: string; name: string; type: 'vector'; styleUrl: string }
 
 const baseLayers: BaseLayer[] = [
-  { id: 'protomaps-light', name: '浅色', type: 'vector', styleUrl: '/map-styles/light.json' },
-  { id: 'protomaps-dark', name: '深色', type: 'vector', styleUrl: '/map-styles/dark.json' },
+  {
+    id: 'protomaps-light',
+    name: '浅色',
+    type: 'vector',
+    styleUrl: '/map-styles/light.json'
+  },
+  {
+    id: 'protomaps-dark',
+    name: '深色',
+    type: 'vector',
+    styleUrl: '/map-styles/dark.json'
+  },
   { id: 'osm', name: '普通地图', type: 'raster' },
   { id: 'satellite', name: '卫星图像', type: 'raster' }
 ]
@@ -141,16 +190,18 @@ const layerOptions = computed<BaseLayerOption[]>(() => [
   { id: 'protomaps-light', name: '浅色', icon: SunnyOutline },
   { id: 'protomaps-dark', name: '深色', icon: MoonOutline },
   { id: 'osm', name: '普通地图', icon: MapOutline },
-  { id: 'satellite', name: '卫星图像', icon: EarthOutline },
+  { id: 'satellite', name: '卫星图像', icon: EarthOutline }
 ])
 
 const PROTOMAPS_KEY = import.meta.env.VITE_PROTOMAPS_KEY ?? ''
 
-async function loadVectorStyle(url: string): Promise<maplibregl.StyleSpecification> {
-  const res = await fetch(url)
-  const text = await res.text()
-  const filled = text.replace(/__PROTOMAPS_KEY__/g, PROTOMAPS_KEY)
-  return JSON.parse(filled) as maplibregl.StyleSpecification
+async function loadVectorStyle(
+  url: string
+): Promise<maplibregl.StyleSpecification> {
+  return (await fetchMapStyle(
+    url,
+    PROTOMAPS_KEY
+  )) as maplibregl.StyleSpecification
 }
 
 const totalVideos = ref(0)
@@ -193,11 +244,15 @@ const tooltipTarget = computed<string | HTMLElement>(() => {
   return 'body'
 })
 
-const selectedStartTime = computed(() =>
-  globalMinTime.value + rangeStart.value * (globalMaxTime.value - globalMinTime.value)
+const selectedStartTime = computed(
+  () =>
+    globalMinTime.value +
+    rangeStart.value * (globalMaxTime.value - globalMinTime.value)
 )
-const selectedEndTime = computed(() =>
-  globalMinTime.value + rangeEnd.value * (globalMaxTime.value - globalMinTime.value)
+const selectedEndTime = computed(
+  () =>
+    globalMinTime.value +
+    rangeEnd.value * (globalMaxTime.value - globalMinTime.value)
 )
 
 /**
@@ -229,7 +284,7 @@ function getTimeParams(): { startDate?: string; endDate?: string } {
   const fmt = (ts: number) => new Date(ts).toISOString().slice(0, 10)
   return {
     startDate: fmt(selectedStartTime.value),
-    endDate: fmt(selectedEndTime.value),
+    endDate: fmt(selectedEndTime.value)
   }
 }
 
@@ -240,13 +295,14 @@ function clamp(v: number, min: number, max: number) {
 }
 
 function updateTimelineFromAggregation(data: {
-  minTime?: string;
-  maxTime?: string;
-  bucketCount?: number;
-  bucketWidthSeconds?: number;
-  timeHistogram?: { index: number; start: string; count: number }[];
+  minTime?: string
+  maxTime?: string
+  bucketCount?: number
+  bucketWidthSeconds?: number
+  timeHistogram?: { index: number; start: string; count: number }[]
 }) {
   if (data.minTime && data.maxTime) {
+    hasTimeRange.value = true
     const newMin = new Date(data.minTime).getTime()
     const newMax = new Date(data.maxTime).getTime()
 
@@ -327,7 +383,7 @@ function applyPendingTimeRange() {
 // --- 经度归一化 ---
 
 function wrapLng(lng: number): number {
-  return ((lng % 360) + 540) % 360 - 180
+  return (((lng % 360) + 540) % 360) - 180
 }
 
 function nearestLng(lng: number, referenceLng: number): number {
@@ -366,24 +422,48 @@ function normalizeBounds(bounds: maplibregl.LngLatBounds) {
  * 4 个角各自转换后取 min/max，处理跨国境视口时（境外角点恒等返回）矩形略微膨胀 ~0.006°，
  * 安全地多框入少量境外 WGS84 点，不会漏。
  */
-function bboxToGcj02(b: { minLng: number; minLat: number; maxLng: number; maxLat: number }) {
+function bboxToGcj02(b: {
+  minLng: number
+  minLat: number
+  maxLng: number
+  maxLat: number
+}) {
   const corners: Array<[number, number]> = [
     wgs84ToGcj02(b.minLng, b.minLat),
     wgs84ToGcj02(b.minLng, b.maxLat),
     wgs84ToGcj02(b.maxLng, b.minLat),
-    wgs84ToGcj02(b.maxLng, b.maxLat),
+    wgs84ToGcj02(b.maxLng, b.maxLat)
   ]
   return {
-    minLng: Math.min(corners[0][0], corners[1][0], corners[2][0], corners[3][0]),
-    minLat: Math.min(corners[0][1], corners[1][1], corners[2][1], corners[3][1]),
-    maxLng: Math.max(corners[0][0], corners[1][0], corners[2][0], corners[3][0]),
-    maxLat: Math.max(corners[0][1], corners[1][1], corners[2][1], corners[3][1]),
+    minLng: Math.min(
+      corners[0][0],
+      corners[1][0],
+      corners[2][0],
+      corners[3][0]
+    ),
+    minLat: Math.min(
+      corners[0][1],
+      corners[1][1],
+      corners[2][1],
+      corners[3][1]
+    ),
+    maxLng: Math.max(
+      corners[0][0],
+      corners[1][0],
+      corners[2][0],
+      corners[3][0]
+    ),
+    maxLat: Math.max(corners[0][1], corners[1][1], corners[2][1], corners[3][1])
   }
 }
 
 // --- 工具函数 ---
 
-function resolveThumbnail(_objectKey: string, thumbnailUrl: string | null, _mediaType: string): string {
+function resolveThumbnail(
+  _objectKey: string,
+  thumbnailUrl: string | null,
+  _mediaType: string
+): string {
   return thumbnailUrl || ''
 }
 
@@ -398,7 +478,9 @@ const IMAGE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" w
 
 // --- 图层切换 ---
 
-function buildRasterStyle(activeId: 'osm' | 'satellite'): maplibregl.StyleSpecification {
+function buildRasterStyle(
+  activeId: 'osm' | 'satellite'
+): maplibregl.StyleSpecification {
   return {
     version: 8,
     sources: {
@@ -434,29 +516,33 @@ function buildRasterStyle(activeId: 'osm' | 'satellite'): maplibregl.StyleSpecif
   }
 }
 
+let layerRequest = 0
 async function switchLayer(layerId: string) {
-  if (!map) return
-  const layer = baseLayers.find(l => l.id === layerId)
+  if (!map || isInitializingMap.value) return
+  const layer = baseLayers.find((l) => l.id === layerId)
   if (!layer) return
 
-  activeLayer.value = layerId
-
-  if (layer.type === 'vector') {
-    const style = await loadVectorStyle(layer.styleUrl)
+  const id = ++layerRequest
+  try {
+    const style =
+      layer.type === 'vector'
+        ? await loadVectorStyle(layer.styleUrl)
+        : buildRasterStyle(layer.id)
+    if (id !== layerRequest || !map || disposed) return
     map.setStyle(style, { diff: false })
-  } else {
-    map.setStyle(buildRasterStyle(layer.id), { diff: false })
+    activeLayer.value = layerId
+    mapError.value = ''
+    map.once('idle', fetchAggregation)
+  } catch (error) {
+    if (id === layerRequest) mapError.value = '底图切换失败，请重试'
+    console.error(error)
   }
-
-  map.once('idle', () => {
-    fetchAggregation()
-  })
 }
 
 // --- 标记管理 ---
 
 function clearMarkers() {
-  markerEntries.forEach(e => e.marker.remove())
+  markerEntries.forEach((e) => e.marker.remove())
   markerEntries.length = 0
 }
 
@@ -467,7 +553,10 @@ function clearMarkers() {
  *       .cluster-marker-inner / .point-marker-inner ← 视觉容器，hover 缩放在这里
  * 三层分离避免 motion 的 WAAPI 把 hover 的 transform 覆盖掉。
  */
-function createClusterMarkerElement(cluster: MapClusterVO): { el: HTMLDivElement; motionWrapper: HTMLDivElement } {
+function createClusterMarkerElement(cluster: MapClusterVO): {
+  el: HTMLDivElement
+  motionWrapper: HTMLDivElement
+} {
   const el = document.createElement('div')
   el.className = 'marker-anchor'
 
@@ -498,17 +587,26 @@ function createClusterMarkerElement(cluster: MapClusterVO): { el: HTMLDivElement
       </div>
     </div>
   `
-  const motionWrapper = el.querySelector('.marker-motion-wrapper') as HTMLDivElement
+  const motionWrapper = el.querySelector(
+    '.marker-motion-wrapper'
+  ) as HTMLDivElement
   return { el, motionWrapper }
 }
 
-function createPointMarkerElement(point: MapPointVO): { el: HTMLDivElement; motionWrapper: HTMLDivElement } {
+function createPointMarkerElement(point: MapPointVO): {
+  el: HTMLDivElement
+  motionWrapper: HTMLDivElement
+} {
   const el = document.createElement('div')
   el.className = 'marker-anchor'
   el.style.width = '60px'
   el.style.height = '60px'
 
-  const thumbUrl = resolveThumbnail(point.objectKey, point.thumbnailUrl, point.mediaType)
+  const thumbUrl = resolveThumbnail(
+    point.objectKey,
+    point.thumbnailUrl,
+    point.mediaType
+  )
   const typeSvg = point.mediaType === 'video' ? VIDEO_SVG : IMAGE_SVG
 
   el.innerHTML = `
@@ -519,14 +617,21 @@ function createPointMarkerElement(point: MapPointVO): { el: HTMLDivElement; moti
       </div>
     </div>
   `
-  const motionWrapper = el.querySelector('.marker-motion-wrapper') as HTMLDivElement
+  const motionWrapper = el.querySelector(
+    '.marker-motion-wrapper'
+  ) as HTMLDivElement
   return { el, motionWrapper }
 }
 
 // --- 动画辅助 ---
 
-interface PixelPos { x: number; y: number }
-interface OldEntrySnapshot extends PixelPos { entry: MarkerEntry }
+interface PixelPos {
+  x: number
+  y: number
+}
+interface OldEntrySnapshot extends PixelPos {
+  entry: MarkerEntry
+}
 
 function projectLngLat(lng: number, lat: number): PixelPos | null {
   if (!map) return null
@@ -538,7 +643,7 @@ function projectLngLat(lng: number, lat: number): PixelPos | null {
 function findNearestDelta(
   px: PixelPos,
   snapshots: PixelPos[],
-  maxDist: number,
+  maxDist: number
 ): { dx: number; dy: number } | null {
   let best: PixelPos | null = null
   let bestD = maxDist
@@ -557,12 +662,16 @@ function findNearestDelta(
 
 const IN_PLACE_PX = 4
 
-function animateMarkerIn(target: HTMLElement, src: { dx: number; dy: number } | null) {
+function animateMarkerIn(
+  target: HTMLElement,
+  src: { dx: number; dy: number } | null
+) {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
   if (!src) {
     animate(
       target,
       { scale: [0.7, 1], opacity: [0, 1] },
-      { duration: 0.25, ease: [0.22, 1, 0.36, 1] },
+      { duration: 0.25, ease: [0.22, 1, 0.36, 1] }
     )
     return
   }
@@ -571,11 +680,18 @@ function animateMarkerIn(target: HTMLElement, src: { dx: number; dy: number } | 
   animate(
     target,
     { x: [src.dx, 0], y: [src.dy, 0], scale: [0.55, 1], opacity: [0, 1] },
-    { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
+    { duration: 0.45, ease: [0.22, 1, 0.36, 1] }
   )
 }
 
-function animateMarkerOutAndRemove(entry: MarkerEntry, dst: { dx: number; dy: number } | null) {
+function animateMarkerOutAndRemove(
+  entry: MarkerEntry,
+  dst: { dx: number; dy: number } | null
+) {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    entry.marker.remove()
+    return
+  }
   if (dst && Math.hypot(dst.dx, dst.dy) <= IN_PLACE_PX) {
     entry.marker.remove()
     return
@@ -585,15 +701,24 @@ function animateMarkerOutAndRemove(entry: MarkerEntry, dst: { dx: number; dy: nu
   const targetState = dst
     ? { x: dst.dx, y: dst.dy, scale: 0.4, opacity: 0 }
     : { scale: 0.5, opacity: 0 }
-  const controls = animate(target, targetState, { duration: 0.35, ease: [0.4, 0, 1, 1] })
+  const controls = animate(target, targetState, {
+    duration: 0.35,
+    ease: [0.4, 0, 1, 1]
+  })
   controls.then(() => entry.marker.remove()).catch(() => entry.marker.remove())
 }
 
-function clusterEntryId(c: MapClusterVO) { return `cluster:${c.clusterId}` }
-function pointEntryId(p: MapPointVO) { return `point:${p.uuid}` }
+function clusterEntryId(c: MapClusterVO) {
+  return `cluster:${c.clusterId}`
+}
+function pointEntryId(p: MapPointVO) {
+  return `point:${p.uuid}`
+}
 
 function attachMarkerHoverEvents(el: HTMLElement, entryId: string) {
-  el.addEventListener('mouseenter', () => { hoveredEntryId.value = entryId })
+  el.addEventListener('mouseenter', () => {
+    hoveredEntryId.value = entryId
+  })
   el.addEventListener('mouseleave', () => {
     if (hoveredEntryId.value === entryId) hoveredEntryId.value = null
   })
@@ -602,10 +727,10 @@ function attachMarkerHoverEvents(el: HTMLElement, entryId: string) {
 function renderClusters(
   clusters: MapClusterVO[],
   oldSnapshots: OldEntrySnapshot[],
-  newSnapshotsOut: PixelPos[],
+  newSnapshotsOut: PixelPos[]
 ) {
   const centerLng = map!.getCenter().lng
-  clusters.forEach(cluster => {
+  clusters.forEach((cluster) => {
     const { el, motionWrapper } = createClusterMarkerElement(cluster)
     const [tLng, tLat] = gcj02ToWgs84(cluster.longitude, cluster.latitude)
     const lng = nearestLng(tLng, centerLng)
@@ -633,10 +758,10 @@ function renderClusters(
 function renderPoints(
   points: MapPointVO[],
   oldSnapshots: OldEntrySnapshot[],
-  newSnapshotsOut: PixelPos[],
+  newSnapshotsOut: PixelPos[]
 ) {
   const centerLng = map!.getCenter().lng
-  points.forEach(point => {
+  points.forEach((point) => {
     const { el, motionWrapper } = createPointMarkerElement(point)
     const [tLng, tLat] = gcj02ToWgs84(point.longitude, point.latitude)
     const lng = nearestLng(tLng, centerLng)
@@ -674,8 +799,13 @@ async function fetchAggregation() {
   currentZoom.value = zoom
 
   loading.value = true
+  dataError.value = false
   try {
-    const data = await getMapAggregation({ ...bounds, zoom, ...getTimeParams() })
+    const data = await getMapAggregation({
+      ...bounds,
+      zoom,
+      ...getTimeParams()
+    })
 
     if (seq !== fetchSeq) return
 
@@ -703,7 +833,7 @@ async function fetchAggregation() {
 
     // 没有新标记时直接 remove 旧标记，避免旧标记孤零零地原地缩小
     if (newSnapshots.length === 0) {
-      oldEntries.forEach(e => e.marker.remove())
+      oldEntries.forEach((e) => e.marker.remove())
     } else {
       for (const snap of oldSnapshots) {
         const dst = findNearestDelta(snap, newSnapshots, MOTION_MATCH_PX)
@@ -715,6 +845,7 @@ async function fetchAggregation() {
     syncMarkerActive()
   } catch (e) {
     if (seq !== fetchSeq) return
+    dataError.value = true
     console.error('地图聚合请求失败', e)
   } finally {
     if (seq === fetchSeq) loading.value = false
@@ -745,23 +876,37 @@ function onHoverEntry(id: string | null) {
 function onSelectEntry(entry: SidebarEntry) {
   if (!map) return
   if (entry.kind === 'cluster') {
-    const cluster = currentClusters.value.find(c => clusterEntryId(c) === entry.id)
+    const cluster = currentClusters.value.find(
+      (c) => clusterEntryId(c) === entry.id
+    )
     if (!cluster) return
     const [lng, lat] = gcj02ToWgs84(cluster.longitude, cluster.latitude)
     const targetZoom = Math.min((map.getZoom() ?? 0) + 2, 16)
-    map.flyTo({ center: [lng, lat], zoom: targetZoom, duration: 700 })
+    map.flyTo({
+      center: [lng, lat],
+      zoom: targetZoom,
+      duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? 0
+        : 700
+    })
     openClusterMedia(cluster)
   } else {
-    const point = currentPoints.value.find(p => pointEntryId(p) === entry.id)
+    const point = currentPoints.value.find((p) => pointEntryId(p) === entry.id)
     if (!point) return
     const [lng, lat] = gcj02ToWgs84(point.longitude, point.latitude)
-    map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom() ?? 0, 14), duration: 600 })
+    map.flyTo({
+      center: [lng, lat],
+      zoom: Math.max(map.getZoom() ?? 0, 14),
+      duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? 0
+        : 600
+    })
     pulseMarker(entry.id)
   }
 }
 
 function pulseMarker(entryId: string) {
-  const entry = markerEntries.find(e => e.entryId === entryId)
+  const entry = markerEntries.find((e) => e.entryId === entryId)
   if (!entry) return
   // 短暂闪烁高亮，0.9s 后自动取消
   entry.el.classList.add('is-pulse')
@@ -782,10 +927,7 @@ function clusterSubtitle(c: MapClusterVO) {
 }
 
 function pointTitleFromKey(p: MapPointVO) {
-  // 取最后一段路径作为「文件名」展示
-  const key = p.objectKey || ''
-  const seg = key.split('/').filter(Boolean).pop() ?? p.uuid
-  return seg.length > 36 ? seg.slice(0, 33) + '…' : seg
+  return p.mediaType === 'video' ? '视频作品' : '摄影作品'
 }
 
 function pointSubtitle(p: MapPointVO) {
@@ -802,14 +944,18 @@ const allEntries = computed<SidebarEntry[]>(() => {
       kind: 'cluster',
       title: clusterTitle(c),
       subtitle: clusterSubtitle(c),
-      thumb: resolveThumbnail(c.representativeObjectKey, c.representativeThumbnailUrl, c.representativeMediaType),
+      thumb: resolveThumbnail(
+        c.representativeObjectKey,
+        c.representativeThumbnailUrl,
+        c.representativeMediaType
+      ),
       count: c.count,
       videoCount: c.videoCount,
       imageCount: c.imageCount,
       mediaType: c.representativeMediaType,
       lng: c.longitude,
       lat: c.latitude,
-      raw: c,
+      raw: c
     })
   }
   for (const p of currentPoints.value) {
@@ -825,7 +971,7 @@ const allEntries = computed<SidebarEntry[]>(() => {
       mediaType: p.mediaType,
       lng: p.longitude,
       lat: p.latitude,
-      raw: p,
+      raw: p
     })
   }
   // 簇优先 + 数量降序，单点放后面
@@ -838,8 +984,8 @@ const allEntries = computed<SidebarEntry[]>(() => {
 const filteredEntries = computed<SidebarEntry[]>(() => {
   const f = entryFilter.value
   if (f === 'all') return allEntries.value
-  if (f === 'video') return allEntries.value.filter(e => e.videoCount > 0)
-  return allEntries.value.filter(e => e.imageCount > 0)
+  if (f === 'video') return allEntries.value.filter((e) => e.videoCount > 0)
+  return allEntries.value.filter((e) => e.imageCount > 0)
 })
 
 // --- 侧栏折叠 ---
@@ -854,12 +1000,22 @@ function toggleSidebar() {
 
 // --- 地图工具栏 ---
 
-function handleZoomIn() { map?.zoomIn() }
-function handleZoomOut() { map?.zoomOut() }
+function handleZoomIn() {
+  map?.zoomIn()
+}
+function handleZoomOut() {
+  map?.zoomOut()
+}
 function handleHome() {
   if (!map) return
   // 默认中心广州（广东省会，WGS-84），与初始视图一致
-  map.flyTo({ center: [113.2644, 23.1291], zoom: 5, duration: 800 })
+  map.flyTo({
+    center: [113.2644, 23.1291],
+    zoom: 5,
+    duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      ? 0
+      : 800
+  })
 }
 
 async function toggleFullscreen() {
@@ -912,7 +1068,11 @@ async function loadMoreClusterMedia() {
   const nextPage = currentClusterPage + 1
   clusterLoading.value = true
   try {
-    const res = await getClusterMedia(currentClusterId, nextPage, CLUSTER_PAGE_SIZE)
+    const res = await getClusterMedia(
+      currentClusterId,
+      nextPage,
+      CLUSTER_PAGE_SIZE
+    )
     currentClusterPage = nextPage
     clusterMediaList.value.push(...res.data)
   } catch (e) {
@@ -925,9 +1085,10 @@ async function loadMoreClusterMedia() {
 // --- 导航 ---
 
 function navigateToDetail(point: MapPointVO) {
-  const routeLocation = point.mediaType === 'video'
-    ? { name: 'VideoPlayer', params: { uuid: point.uuid } }
-    : { name: 'ImageDetail', params: { uuid: point.uuid } }
+  const routeLocation =
+    point.mediaType === 'video'
+      ? { name: 'VideoPlayer', params: { uuid: point.uuid } }
+      : { name: 'ImageDetail', params: { uuid: point.uuid } }
 
   router.push(routeLocation)
 }
@@ -992,62 +1153,95 @@ let wasMobile = false
 
 function onViewportResize() {
   const isMobile = window.innerWidth < 720
+  mobileViewport.value = isMobile
   if (isMobile !== wasMobile) {
     sidebarCollapsed.value = isMobile
     wasMobile = isMobile
   }
 }
 
-onMounted(async () => {
+onMounted(() => {
   // 首次进入及跨越窄屏断点时收起侧栏，避免 320px 侧栏挤压地图。
   wasMobile = window.innerWidth < 720
   sidebarCollapsed.value = wasMobile
   window.addEventListener('resize', onViewportResize)
 
-
-
-  const initialStyle = await loadVectorStyle('/map-styles/light.json')
-
-  const initialView = resolveInitialView()
-
-  map = new maplibregl.Map({
-    container: mapContainer.value!,
-    style: initialStyle,
-    center: initialView.center,
-    zoom: initialView.zoom,
-  })
-
-  map.on('load', () => {
-    if (pendingBbox && map) {
-      map.fitBounds(pendingBbox, {
-        padding: { top: 80, bottom: 160, left: 80, right: 80 },
-        duration: 0,
-        maxZoom: 13,
-      })
-      pendingBbox = null
-    }
-    fetchAggregation()
-  })
-
-  map.on('moveend', fetchAggregation)
-  map.on('zoom', () => {
-    if (map) currentZoom.value = Math.round(map.getZoom())
-  })
-
-  document.addEventListener('keydown', onKeyDown)
-  document.addEventListener('fullscreenchange', onFullscreenChange)
-
-  // 监听 wrapper 尺寸变化，自动 resize 地图（侧栏 transition / 全屏 / 窗口缩放都会触发）
-  if (wrapperRef.value) {
-    resizeObserver = new ResizeObserver(() => map?.resize())
-    resizeObserver.observe(wrapperRef.value)
-  }
+  void initializeMap()
 })
+
+async function initializeMap() {
+  if (isInitializingMap.value || disposed) return
+  isInitializingMap.value = true
+  let stage: 'style' | 'renderer' | 'setup' = 'style'
+  mapError.value = ''
+  try {
+    const initialStyle = await loadVectorStyle('/map-styles/dark.json')
+    if (disposed) return
+    resizeObserver?.disconnect()
+    clearMarkers()
+    map?.remove()
+    map = null
+    activeLayer.value = 'protomaps-dark'
+
+    const initialView = resolveInitialView()
+
+    stage = 'renderer'
+    map = new maplibregl.Map({
+      container: mapContainer.value!,
+      style: initialStyle,
+      center: initialView.center,
+      zoom: initialView.zoom
+    })
+
+    stage = 'setup'
+    map.on('webglcontextlost', () => {
+      mapError.value = '地图图形渲染已中断，正在等待恢复；也可点击重试'
+    })
+    map.on('webglcontextrestored', () => {
+      mapError.value = ''
+      map?.resize()
+    })
+
+    map.on('load', () => {
+      if (pendingBbox && map) {
+        map.fitBounds(pendingBbox, {
+          padding: { top: 80, bottom: 160, left: 80, right: 80 },
+          duration: 0,
+          maxZoom: 13
+        })
+        pendingBbox = null
+      }
+      fetchAggregation()
+    })
+
+    map.on('moveend', fetchAggregation)
+    map.on('zoom', () => {
+      if (map) currentZoom.value = Math.round(map.getZoom())
+    })
+
+    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+
+    // 监听 wrapper 尺寸变化，自动 resize 地图（侧栏 transition / 全屏 / 窗口缩放都会触发）
+    if (wrapperRef.value) {
+      resizeObserver = new ResizeObserver(() => map?.resize())
+      resizeObserver.observe(wrapperRef.value)
+    }
+  } catch (error) {
+    if (!disposed) mapError.value = mapInitializationMessage(error, stage)
+    console.error(`地图初始化失败 [${stage}]`, error)
+  } finally {
+    isInitializingMap.value = false
+  }
+}
 
 function resolveInitialView(): { center: [number, number]; zoom: number } {
   // 默认中心广州（WGS-84，[lng, lat]）。无 ?bbox / ?lat&lng 等首屏参数时落在广东，
   // 与 handleHome / 管理后台 LocationPicker 默认中心保持一致。
-  const defaultView = { center: [113.2644, 23.1291] as [number, number], zoom: 5 }
+  const defaultView = {
+    center: [113.2644, 23.1291] as [number, number],
+    zoom: 5
+  }
   let center = defaultView.center
   let zoom = defaultView.zoom
 
@@ -1055,13 +1249,23 @@ function resolveInitialView(): { center: [number, number]; zoom: number } {
   if (bbox) {
     const [swLng, swLat] = gcj02ToWgs84(bbox[0][0], bbox[0][1])
     const [neLng, neLat] = gcj02ToWgs84(bbox[1][0], bbox[1][1])
-    pendingBbox = [[swLng, swLat], [neLng, neLat]]
+    pendingBbox = [
+      [swLng, swLat],
+      [neLng, neLat]
+    ]
     center = [(swLng + neLng) / 2, (swLat + neLat) / 2]
     zoom = 8
   } else {
     const lat = parseFloat(String(route.query.lat ?? ''))
     const lng = parseFloat(String(route.query.lng ?? ''))
-    if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+    if (
+      Number.isFinite(lat) &&
+      Number.isFinite(lng) &&
+      lat >= -90 &&
+      lat <= 90 &&
+      lng >= -180 &&
+      lng <= 180
+    ) {
       const [wgsLng, wgsLat] = gcj02ToWgs84(lng, lat)
       center = [wgsLng, wgsLat]
       zoom = 11
@@ -1089,10 +1293,15 @@ function parseBboxQuery(): [[number, number], [number, number]] | null {
   if (![minLng, minLat, maxLng, maxLat].every(Number.isFinite)) return null
   if (minLng >= maxLng || minLat >= maxLat) return null
   if (minLng < -180 || maxLng > 180 || minLat < -90 || maxLat > 90) return null
-  return [[minLng, minLat], [maxLng, maxLat]]
+  return [
+    [minLng, minLat],
+    [maxLng, maxLat]
+  ]
 }
 
 onUnmounted(() => {
+  disposed = true
+  fetchSeq++
   if (debounceTimer) clearTimeout(debounceTimer)
   clearMarkers()
   if (map) {
@@ -1110,8 +1319,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-@import './map/mapTokens.css';
-
 .map-wrapper {
   height: 100%;
   width: 100%;
@@ -1151,7 +1358,10 @@ onUnmounted(() => {
   color: var(--map-text-secondary);
   cursor: pointer;
   z-index: calc(var(--map-z-floating) + 1);
-  transition: left 0.28s cubic-bezier(0.22, 1, 0.36, 1), background 0.18s ease, color 0.18s ease;
+  transition:
+    left 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.18s ease,
+    color 0.18s ease;
   padding: 0;
 }
 
@@ -1177,7 +1387,7 @@ onUnmounted(() => {
 
 .map-toolbar-pos {
   position: absolute;
-  top: 64px;
+  top: 76px;
   right: 12px;
   z-index: var(--map-z-floating);
 }
@@ -1200,7 +1410,9 @@ onUnmounted(() => {
 
 .chip-fade-enter-active,
 .chip-fade-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }
 
 .chip-fade-enter-from,
@@ -1212,14 +1424,75 @@ onUnmounted(() => {
 /* 侧栏过渡：宽度收缩动画由 MapSidebar.collapsed 自身控制；
    .sidebar-collapsed 时 wrapper 进入"无侧栏"流式布局 */
 .map-sidebar {
-  transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-              border-right-width 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  transition:
+    width 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    border-right-width 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @media (max-width: 720px) {
   .map-toolbar-pos {
+    top: 76px;
+    bottom: auto;
+  }
+}
+.sidebar-handle,
+.map-wrapper.sidebar-collapsed .sidebar-handle {
+  width: 44px;
+  border-radius: 0;
+}
+.map-error {
+  position: absolute;
+  left: 50%;
+  top: 72px;
+  transform: translateX(-50%);
+  z-index: 12;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  max-width: calc(100% - 110px);
+}
+.map-error button {
+  background: none;
+  color: var(--accent);
+  border: 0;
+  min-height: 36px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.map-error span {
+  min-width: 0;
+}
+.map-marker-inner {
+  border-radius: 2px;
+}
+@media (max-width: 719px) {
+  .sidebar-handle,
+  .map-wrapper.sidebar-collapsed .sidebar-handle {
+    top: 12px;
+    left: 12px;
+    transform: none;
+    height: 44px;
+    z-index: 25;
+  }
+  .map-wrapper:not(.sidebar-collapsed) :deep(.maplibregl-ctrl-bottom-right) {
+    bottom: min(52%, 420px);
+  }
+  .map-wrapper:not(.sidebar-collapsed) .sidebar-handle {
     top: auto;
-    bottom: 130px;
+    bottom: calc(min(52%, 420px) + 8px);
+  }
+  .loading-chip {
+    top: 72px;
+    left: 12px;
+    transform: none;
+    max-width: calc(100% - 84px);
+  }
+  .map-error {
+    top: 118px;
+    left: 12px;
+    transform: none;
   }
 }
 </style>
@@ -1227,8 +1500,6 @@ onUnmounted(() => {
 <!-- maplibre marker 是 document.createElement 出来直接挂在地图 canvas 上的，
      不在 Vue scoped 选择器作用域内，相关样式必须放在非 scoped 块。 -->
 <style>
-@import './map/mapTokens.css';
-
 /* ---- 标记锚点（MapLibre 直接控制此元素的 transform，不要在这里加 transition/transform） ---- */
 .marker-anchor {
   cursor: pointer;
@@ -1270,12 +1541,16 @@ onUnmounted(() => {
   border: 3px solid rgba(255, 255, 255, 0.92);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
   box-sizing: border-box;
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  transition:
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
 }
 
 .marker-anchor:hover .cluster-marker-inner,
 .marker-anchor.is-active .cluster-marker-inner {
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55), 0 0 0 4px rgba(24, 160, 88, 0.35);
+  box-shadow:
+    0 6px 22px rgba(0, 0, 0, 0.55),
+    0 0 0 4px rgba(100, 199, 225, 0.35);
   border-color: var(--map-accent);
 }
 
@@ -1316,13 +1591,18 @@ onUnmounted(() => {
   border: 2px solid rgba(255, 255, 255, 0.92);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
   box-sizing: border-box;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
 }
 
 .marker-anchor:hover .point-marker-inner,
 .marker-anchor.is-active .point-marker-inner {
   transform: scale(1.1);
-  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.5), 0 0 0 4px rgba(24, 160, 88, 0.32);
+  box-shadow:
+    0 5px 16px rgba(0, 0, 0, 0.5),
+    0 0 0 4px rgba(100, 199, 225, 0.32);
   border-color: var(--map-accent);
   z-index: 10;
 }
@@ -1364,13 +1644,13 @@ onUnmounted(() => {
 /* ---- pulse: 侧栏点击单点时短暂高亮 ---- */
 @keyframes marker-pulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(24, 160, 88, 0.6);
+    box-shadow: 0 0 0 0 rgba(100, 199, 225, 0.6);
   }
   70% {
-    box-shadow: 0 0 0 18px rgba(24, 160, 88, 0);
+    box-shadow: 0 0 0 18px rgba(100, 199, 225, 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(24, 160, 88, 0);
+    box-shadow: 0 0 0 0 rgba(100, 199, 225, 0);
   }
 }
 

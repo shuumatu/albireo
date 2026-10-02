@@ -5,10 +5,14 @@
     :loading="loading"
     :error="error"
     :has-items="items.length > 0"
-    empty-text="暂无相似内容（向量还在生成中或未启用）"
+    empty-text="暂时没有相似作品"
     @retry="fetch"
   >
-    <div v-for="item in items" :key="`${item.itemType}-${item.id}`" class="card-wrapper">
+    <div
+      v-for="item in items"
+      :key="`${item.itemType}-${item.id}`"
+      class="card-wrapper"
+    >
       <MediaCard :item="item" />
       <!--
         score = cosine similarity（不是百分比相关度）。
@@ -48,8 +52,8 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   limit: 12,
-  showScore: true,
-  subtitle: '基于视觉特征自动匹配，跨图片与视频封面'
+  showScore: false,
+  subtitle: '延续这一刻的色彩与风景'
 })
 
 const items = ref<SearchItemVO[]>([])
@@ -64,7 +68,7 @@ async function fetch() {
     items.value = await findSimilar(props.type, props.uuid, props.limit)
   } catch (e: any) {
     console.warn('similar 拉取失败', e)
-    error.value = e?.message || '请求失败'
+    error.value = '相似作品暂时无法加载，请稍后重试'
     items.value = []
   } finally {
     loading.value = false

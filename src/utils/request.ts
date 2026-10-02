@@ -1,30 +1,36 @@
 import axios from 'axios'
 
 const request = axios.create({
-  baseURL: 'http://localhost:9090',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:9090',
   timeout: 10000
 })
 
 // 请求拦截器
-request.interceptors.request.use(config => {
-  // 可加入 token
-  const token = localStorage.getItem('token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
-}, error => Promise.reject(error))
+request.interceptors.request.use(
+  (config) => {
+    // 可加入 token
+    const token = localStorage.getItem('token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error) => Promise.reject(error)
+)
 
 // 响应拦截器
-request.interceptors.response.use(response => {
-  return response.data
-}, error => {
-  if (error.response?.status === 401) {
-    localStorage.removeItem('token')
-    window.location.href = '/login'
+request.interceptors.response.use(
+  (response) => {
+    return response.data
+  },
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token')
+      window.location.href = '/login'
+    }
+    console.error('API error', error)
+    return Promise.reject(error)
   }
-  console.error('API error', error)
-  return Promise.reject(error)
-})
+)
 
 export default request

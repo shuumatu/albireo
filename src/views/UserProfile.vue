@@ -1,5 +1,9 @@
 <template>
   <div class="profile-container">
+    <header class="profile-heading">
+      <span class="archive-eyebrow">ACCOUNT / PERSONAL SPACE</span>
+      <h1 class="archive-heading">个人中心</h1>
+    </header>
     <n-grid :cols="24" :x-gap="24" responsive="screen" item-responsive>
       <n-gi span="24 m:8">
         <n-card title="账户信息">
@@ -8,7 +12,12 @@
               {{ username?.charAt(0).toUpperCase() }}
             </n-avatar>
             <div class="user-details">
-              <n-descriptions label-placement="left" :column="1" bordered size="small">
+              <n-descriptions
+                label-placement="left"
+                :column="1"
+                bordered
+                size="small"
+              >
                 <n-descriptions-item label="用户名">
                   {{ username }}
                 </n-descriptions-item>
@@ -16,7 +25,10 @@
                   {{ userId }}
                 </n-descriptions-item>
                 <n-descriptions-item label="角色">
-                  <n-tag :type="role === 'ADMIN' ? 'warning' : 'info'" size="small">
+                  <n-tag
+                    :type="role === 'ADMIN' ? 'warning' : 'info'"
+                    size="small"
+                  >
                     {{ role === 'ADMIN' ? '管理员' : '普通用户' }}
                   </n-tag>
                 </n-descriptions-item>
@@ -87,6 +99,20 @@
 </template>
 
 <script setup lang="ts">
+import {
+  NGrid,
+  NGi,
+  NCard,
+  NAvatar,
+  NDescriptions,
+  NDescriptionsItem,
+  NTag,
+  NDivider,
+  NButton,
+  NForm,
+  NFormItem,
+  NInput
+} from 'naive-ui'
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage, type FormInst, type FormRules } from 'naive-ui'
@@ -108,9 +134,7 @@ const formData = reactive({
 })
 
 const rules: FormRules = {
-  oldPassword: [
-    { required: true, message: '请输入当前密码', trigger: 'blur' }
-  ],
+  oldPassword: [{ required: true, message: '请输入当前密码', trigger: 'blur' }],
   newPassword: [
     { required: true, message: '请输入新密码', trigger: 'blur' },
     { min: 6, max: 64, message: '密码长度为 6-64 位', trigger: 'blur' }
@@ -172,26 +196,44 @@ async function handleChangePassword() {
 
 <style scoped>
 .profile-container {
-  padding: 24px;
-  max-width: 1200px;
-  margin: 0 auto;
+  padding: 56px 8% 80px;
+  max-width: 1440px;
+  margin: auto;
 }
-
+.profile-heading {
+  margin-bottom: 40px;
+}
 .user-info {
   display: flex;
-  flex-direction: column;
   align-items: center;
   gap: 20px;
+  flex-wrap: wrap;
 }
-
-.user-avatar {
-  background: linear-gradient(135deg, #302b63, #24243e);
-  color: #fff;
-  font-size: 28px;
-  font-weight: 600;
-}
-
 .user-details {
-  width: 100%;
+  flex: 1;
+  min-width: 180px;
+}
+.user-avatar {
+  background: var(--surface-raised);
+  color: var(--accent);
+  border: 1px solid var(--line);
+  font-size: 28px;
+}
+.profile-container :deep(.n-grid) {
+  row-gap: 24px !important;
+}
+@media (max-width: 700px) {
+  .profile-container {
+    padding: 32px 20px 60px;
+  }
+  .profile-container :deep(.n-card__content) {
+    padding: 20px;
+  }
+  .profile-container :deep(.n-form-item) {
+    grid-template-columns: 1fr;
+  }
+  .profile-container :deep(.n-form-item-label) {
+    justify-content: flex-start;
+  }
 }
 </style>

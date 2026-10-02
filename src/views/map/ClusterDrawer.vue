@@ -3,7 +3,8 @@
     :show="show"
     @update:show="(v) => $emit('update:show', v)"
     :width="drawerWidth"
-    placement="right"
+    :placement="viewportWidth < 720 ? 'bottom' : 'right'"
+    :height="viewportWidth < 720 ? '60dvh' : undefined"
     :mask-closable="true"
     class="cluster-drawer"
     to="body"
@@ -38,6 +39,11 @@
           v-for="item in items"
           :key="item.uuid"
           class="media-item"
+          role="button"
+          tabindex="0"
+          @keydown.enter="$emit('selectMedia', item)"
+          @keydown.space.prevent="$emit('selectMedia', item)"
+          :aria-label="`查看${item.mediaType === 'video' ? '视频' : '图片'}`"
           @mouseenter="$emit('hoverMedia', item)"
           @mouseleave="$emit('hoverMedia', null)"
           @click="$emit('selectMedia', item)"
@@ -51,7 +57,9 @@
           <div class="media-overlay" />
           <span class="media-type" :class="item.mediaType">
             <n-icon
-              :component="item.mediaType === 'video' ? VideocamOutline : ImageOutline"
+              :component="
+                item.mediaType === 'video' ? VideocamOutline : ImageOutline
+              "
               :size="13"
             />
           </span>
@@ -79,11 +87,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { NDrawer, NDrawerContent, NIcon, NSpin } from 'naive-ui'
-import {
-  VideocamOutline,
-  ImageOutline,
-  LayersOutline,
-} from '@vicons/ionicons5'
+import { VideocamOutline, ImageOutline, LayersOutline } from '@vicons/ionicons5'
 import type { MapPointVO } from '../../api/map'
 
 const props = defineProps<{
@@ -104,7 +108,9 @@ const emit = defineEmits<{
 }>()
 
 // 抽屉打开后窗口仍可能缩放；宽度必须依赖响应式值才能同步更新。
-const viewportWidth = ref(typeof window === 'undefined' ? 480 : window.innerWidth)
+const viewportWidth = ref(
+  typeof window === 'undefined' ? 480 : window.innerWidth
+)
 function updateViewportWidth() {
   viewportWidth.value = window.innerWidth
 }
@@ -219,7 +225,9 @@ function onScroll(e: Event) {
   overflow: hidden;
   cursor: pointer;
   background: rgba(0, 0, 0, 0.4);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .cluster-drawer .media-item:hover {
@@ -289,5 +297,12 @@ function onScroll(e: Event) {
 .cluster-drawer .status-row.end-tip,
 .cluster-drawer .status-row.empty {
   padding: 28px 0 6px;
+}
+.cluster-drawer .media-item {
+  border-radius: 0;
+}
+.cluster-drawer .media-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 </style>

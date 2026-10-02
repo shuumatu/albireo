@@ -2,6 +2,7 @@
   <section class="recommend-section">
     <header class="section-header">
       <div class="title-block">
+        <span v-if="eyebrow" class="archive-eyebrow">{{ eyebrow }}</span>
         <h2 class="section-title">{{ title }}</h2>
         <p v-if="subtitle" class="section-subtitle">{{ subtitle }}</p>
       </div>
@@ -55,9 +56,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 
 interface Props {
+  eyebrow?: string
   title: string
   subtitle?: string
   loading?: boolean
@@ -103,11 +105,24 @@ function scrollBy(direction: -1 | 1) {
   const el = rail.value
   if (!el) return
   const step = Math.max(240, el.clientWidth * 0.8)
-  el.scrollBy({ left: direction * step, behavior: 'smooth' })
+  el.scrollBy({
+    left: direction * step,
+    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      ? 'auto'
+      : 'smooth'
+  })
 }
 
+let observer: ResizeObserver | undefined
 onMounted(() => {
+  observer = new ResizeObserver(updateScrollState)
+  if (rail.value) observer.observe(rail.value)
   nextTick(updateScrollState)
+})
+onBeforeUnmount(() => observer?.disconnect())
+watch(rail, (el, old) => {
+  if (old) observer?.unobserve(old)
+  if (el) observer?.observe(el)
 })
 
 watch(
@@ -121,178 +136,131 @@ watch(
 <style scoped>
 .recommend-section {
   padding: 32px 0;
-  color: rgba(255, 255, 255, 0.92);
-}
-
-.section-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  padding: 0 32px 16px;
-  gap: 16px;
-}
-
-.title-block {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  color: var(--text);
   min-width: 0;
 }
-
+.section-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+.title-block {
+  position: relative;
+  padding-left: 18px;
+  min-width: 0;
+}
+.title-block:before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(
+    var(--accent) 0 12px,
+    transparent 12px 17px,
+    var(--line) 17px
+  );
+}
 .section-title {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
+  font-size: 28px;
+  letter-spacing: 2px;
+  line-height: 1.3;
+  margin: 0 0 8px;
 }
-
 .section-subtitle {
-  margin: 0;
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.55);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.7;
+  color: var(--muted);
+  margin: 0;
 }
-
 .scroll-controls {
   display: flex;
   gap: 8px;
-  flex-shrink: 0;
 }
-
 .scroll-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background-color: rgba(255, 255, 255, 0.08);
-  color: white;
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-  transition: background-color 0.2s ease, opacity 0.2s ease;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--line);
+  color: var(--text);
+  background: transparent;
+  font-size: 24px;
 }
-
 .scroll-btn:hover:not(:disabled) {
-  background-color: rgba(255, 255, 255, 0.18);
+  color: var(--accent);
+  border-color: var(--accent);
 }
-
 .scroll-btn:disabled {
   opacity: 0.3;
-  cursor: not-allowed;
 }
-
 .section-body {
   position: relative;
 }
-
 .scroll-rail {
   display: flex;
-  gap: 16px;
-  padding: 8px 32px 16px;
+  gap: 24px;
+  padding: 5px 4px 20px;
   overflow-x: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  scrollbar-color: var(--line) transparent;
   scroll-snap-type: x proximity;
 }
-
-.scroll-rail::-webkit-scrollbar {
-  height: 6px;
-}
-
-.scroll-rail::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.scroll-rail::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.15);
-  border-radius: 3px;
-}
-
 .scroll-rail :slotted(*) {
   scroll-snap-align: start;
 }
-
-/* 骨架屏 */
 .skeleton-card {
-  width: 240px;
+  width: 280px;
   flex-shrink: 0;
-  border-radius: 10px;
-  overflow: hidden;
-  background-color: #1a1a1a;
+  background: var(--surface);
 }
-
 .skeleton-thumb {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  background: linear-gradient(90deg, #1c1c1c 0%, #2a2a2a 50%, #1c1c1c 100%);
-  background-size: 200% 100%;
-  animation: shimmer 1.4s linear infinite;
+  aspect-ratio: 4/3;
+  background: var(--line);
+  opacity: 0.3;
 }
-
 .skeleton-line {
   height: 12px;
-  margin: 12px 12px 0;
-  border-radius: 4px;
-  background: linear-gradient(90deg, #1c1c1c 0%, #2a2a2a 50%, #1c1c1c 100%);
-  background-size: 200% 100%;
-  animation: shimmer 1.4s linear infinite;
+  margin: 16px;
+  background: var(--line);
+  opacity: 0.4;
 }
-
 .skeleton-line.short {
   width: 50%;
-  margin-bottom: 14px;
 }
-
-@keyframes shimmer {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
-}
-
 .section-empty {
+  padding: 44px 24px;
+  min-height: 160px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 14px;
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
-  padding: 36px 32px;
-  color: rgba(255, 255, 255, 0.45);
-  font-size: 14px;
+  align-items: center;
   gap: 12px;
+  text-align: center;
 }
-
+.section-empty p {
+  margin: 0;
+}
 .retry-btn {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  color: rgba(255, 255, 255, 0.85);
-  padding: 6px 18px;
-  border-radius: 16px;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
+  min-height: 44px;
+  padding: 8px 20px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text);
 }
-
-.retry-btn:hover {
-  background: rgba(255, 255, 255, 0.18);
-}
-
-@media (max-width: 768px) {
-  .section-header {
-    padding: 0 16px 12px;
-  }
-
-  .scroll-rail {
-    padding: 8px 16px 16px;
-  }
-
+@media (max-width: 700px) {
   .section-title {
-    font-size: 18px;
+    font-size: 24px;
+  }
+  .scroll-rail {
+    gap: 16px;
+  }
+  .recommend-section {
+    padding: 24px 0;
   }
 }
 </style>

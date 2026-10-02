@@ -1,11 +1,28 @@
 <template>
   <n-card :bordered="false">
     <div class="image-container">
-      <img :src="content.displayUrl || content.imageUrl" :alt="content.title || '分享图片'" class="share-image" />
+      <div v-if="failed" class="archive-state" role="status">
+        图片暂时无法加载<button
+          class="archive-action"
+          @click="retry"
+        >
+          重试
+        </button>
+      </div>
+      <img
+        v-else
+        :key="attempt"
+        @error="failed = true"
+        :src="content.displayUrl || content.imageUrl"
+        :alt="content.title || '分享图片'"
+        class="share-image"
+      />
     </div>
     <n-space vertical :size="12" style="margin-top: 16px">
       <n-h3 v-if="content.title" style="margin: 0">{{ content.title }}</n-h3>
-      <n-text v-if="content.description" depth="2">{{ content.description }}</n-text>
+      <n-text v-if="content.description" depth="2">{{
+        content.description
+      }}</n-text>
       <n-text v-if="content.shotAt" depth="3" style="font-size: 13px">
         拍摄于 {{ formatDate(content.shotAt) }}
       </n-text>
@@ -14,7 +31,15 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
+import { ref, watch } from 'vue'
+const failed = ref(false),
+  attempt = ref(0)
+function retry() {
+  failed.value = false
+  attempt.value++
+}
+import { NCard, NSpace, NH3, NText } from 'naive-ui'
+const props = defineProps<{
   content: {
     objectKey: string
     fileName?: string
@@ -28,18 +53,27 @@ defineProps<{
   }
 }>()
 
+watch(
+  () => props.content,
+  () => {
+    failed.value = false
+    attempt.value++
+  }
+)
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('zh-CN', {
-    year: 'numeric', month: 'long', day: 'numeric'
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
   })
 }
 </script>
 
 <style scoped>
 .image-container {
-  border-radius: 8px;
+  border-radius: 0;
   overflow: hidden;
-  background: #f0f0f0;
+  background: var(--bg);
   text-align: center;
 }
 

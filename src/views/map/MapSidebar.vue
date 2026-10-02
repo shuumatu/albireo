@@ -1,16 +1,23 @@
 <template>
-  <aside class="map-sidebar" :class="{ collapsed }" :aria-hidden="collapsed">
+  <aside
+    class="map-sidebar"
+    :class="{ collapsed }"
+    :aria-hidden="collapsed"
+    :inert="collapsed"
+  >
     <header class="sidebar-head">
       <div class="head-title">
         <n-icon :component="LayersOutline" :size="18" />
-        <span>视口内容</span>
+        <div>
+          <span class="archive-eyebrow">03 / ATLAS</span>
+          <h1>影像地图</h1>
+        </div>
       </div>
-      <div class="filter-chips" role="tablist" aria-label="按媒体类型筛选">
+      <div class="filter-chips" role="group" aria-label="按媒体类型筛选">
         <button
           type="button"
-          role="tab"
           :class="['chip', { active: filter === 'all' }]"
-          :aria-selected="filter === 'all'"
+          :aria-pressed="filter === 'all'"
           @click="$emit('update:filter', 'all')"
         >
           全部
@@ -18,9 +25,9 @@
         </button>
         <button
           type="button"
-          role="tab"
           :class="['chip', { active: filter === 'video' }]"
-          :aria-selected="filter === 'video'"
+          aria-label="只看视频"
+          :aria-pressed="filter === 'video'"
           @click="$emit('update:filter', 'video')"
         >
           <n-icon :component="VideocamOutline" :size="14" />
@@ -28,9 +35,9 @@
         </button>
         <button
           type="button"
-          role="tab"
           :class="['chip', { active: filter === 'image' }]"
-          :aria-selected="filter === 'image'"
+          aria-label="只看图片"
+          :aria-pressed="filter === 'image'"
           @click="$emit('update:filter', 'image')"
         >
           <n-icon :component="ImageOutline" :size="14" />
@@ -53,6 +60,12 @@
             :class="['entry-item', { hovered: hoveredId === entry.id }]"
             @mouseenter="$emit('hoverEntry', entry.id)"
             @mouseleave="$emit('hoverEntry', null)"
+            role="button"
+            tabindex="0"
+            @keydown.enter="$emit('selectEntry', entry)"
+            @keydown.space.prevent="$emit('selectEntry', entry)"
+            @focus="$emit('hoverEntry', entry.id)"
+            @blur="$emit('hoverEntry', null)"
             @click="$emit('selectEntry', entry)"
           >
             <div class="entry-thumb-wrap">
@@ -63,10 +76,14 @@
                 loading="lazy"
                 @error="onThumbError"
               />
-              <span v-if="entry.kind === 'cluster'" class="entry-badge">{{ entry.count }}</span>
+              <span v-if="entry.kind === 'cluster'" class="entry-badge">{{
+                entry.count
+              }}</span>
               <span v-else class="entry-type-pill" :class="entry.mediaType">
                 <n-icon
-                  :component="entry.mediaType === 'video' ? VideocamOutline : ImageOutline"
+                  :component="
+                    entry.mediaType === 'video' ? VideocamOutline : ImageOutline
+                  "
                   :size="11"
                 />
               </span>
@@ -75,7 +92,11 @@
               <div class="entry-title">{{ entry.title }}</div>
               <div class="entry-sub">{{ entry.subtitle }}</div>
             </div>
-            <n-icon class="entry-arrow" :component="ChevronForward" :size="14" />
+            <n-icon
+              class="entry-arrow"
+              :component="ChevronForward"
+              :size="14"
+            />
           </li>
         </ul>
       </n-scrollbar>
@@ -97,7 +118,7 @@ import {
   ImageOutline,
   LayersOutline,
   ChevronForward,
-  NavigateOutline,
+  NavigateOutline
 } from '@vicons/ionicons5'
 
 export type EntryFilter = 'all' | 'video' | 'image'
@@ -140,8 +161,6 @@ function onThumbError(event: Event) {
 </script>
 
 <style scoped>
-@import './mapTokens.css';
-
 .map-sidebar {
   position: relative;
   width: var(--map-sidebar-width);
@@ -198,7 +217,10 @@ function onThumbError(event: Event) {
   color: var(--map-text-secondary);
   font-size: 12px;
   cursor: pointer;
-  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    border-color 0.18s ease;
 }
 
 .chip:hover {
@@ -245,7 +267,9 @@ function onThumbError(event: Event) {
   padding: 8px;
   border-radius: var(--map-radius-md);
   cursor: pointer;
-  transition: background 0.18s ease, transform 0.18s ease;
+  transition:
+    background 0.18s ease,
+    transform 0.18s ease;
   border: 1px solid transparent;
 }
 
@@ -356,7 +380,9 @@ function onThumbError(event: Event) {
   color: var(--map-text-tertiary);
   flex-shrink: 0;
   opacity: 0;
-  transition: opacity 0.18s ease, transform 0.18s ease;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
 }
 
 .entry-item:hover .entry-arrow,
@@ -410,5 +436,80 @@ function onThumbError(event: Event) {
 .foot-zoom {
   text-transform: uppercase;
   font-size: 10px;
+}
+.head-title h1 {
+  font-size: 23px;
+  font-weight: 600;
+  margin: 8px 0 0;
+  letter-spacing: 2px;
+}
+.head-title {
+  align-items: flex-end;
+}
+.head-title > .n-icon {
+  display: none;
+}
+.sidebar-head {
+  padding: 26px 20px 16px;
+}
+.chip {
+  min-height: 44px;
+  white-space: nowrap;
+}
+.entry-thumb-wrap,
+.entry-thumb {
+  border-radius: 0;
+}
+.entry-item {
+  border-radius: 0;
+  border-bottom: 1px solid var(--map-glass-border);
+}
+.entry-item:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -2px;
+}
+.entry-badge {
+  color: var(--accent-ink);
+}
+@media (max-width: 719px) {
+  .map-sidebar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: min(52%, 420px);
+    border-top: 1px solid var(--line);
+    z-index: 20;
+  }
+  .map-sidebar.collapsed {
+    width: 100%;
+    height: 0;
+    visibility: hidden;
+  }
+  .sidebar-head {
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .head-title h1 {
+    font-size: 18px;
+    margin: 4px 0 0;
+  }
+  .head-title .archive-eyebrow {
+    font-size: 8px;
+  }
+  .filter-chips {
+    margin-top: 0;
+    flex-shrink: 0;
+  }
+  .filter-chips .chip {
+    padding: 6px 8px;
+  }
+  .sidebar-foot {
+    padding: 8px 20px;
+  }
 }
 </style>

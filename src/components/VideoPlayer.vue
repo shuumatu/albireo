@@ -8,7 +8,7 @@
       :fluid="true"
       :aspect-ratio="'16:9'"
       :picture-in-picture="true"
-      class="video-js vjs-big-play-centered theme-green"
+      class="video-js vjs-big-play-centered theme-archive"
       @mounted="handleMounted"
       @ready="handleReady"
     />
@@ -24,10 +24,21 @@ import type Component from 'video.js/dist/types/component'
 import type MenuButtonType from 'video.js/dist/types/menu/menu-button'
 import type MenuItemType from 'video.js/dist/types/menu/menu-item'
 
-type GalleryPlayer = Player & { controlBar: Component; _customCleanup?: () => void }
-type QualityOptions = { label: string; qualityLabel: string; qualityIndex: number }
+type GalleryPlayer = Player & {
+  controlBar: Component
+  _customCleanup?: () => void
+}
+type QualityOptions = {
+  label: string
+  qualityLabel: string
+  qualityIndex: number
+}
 // Video.js discovers custom components at runtime; its base declaration loses the subtype.
-type QualityButton = Component & { items: Array<MenuItemType & { qualityIndex: number }>; update(): void; updateButtonText(): void }
+type QualityButton = Component & {
+  items: Array<MenuItemType & { qualityIndex: number }>
+  update(): void
+  updateButtonText(): void
+}
 
 import 'video.js/dist/video-js.css'
 import type { VideoSource } from '../types/video'
@@ -79,18 +90,20 @@ const syncSources = () => {
 watch(sources, syncSources, { deep: true, flush: 'post' })
 watch(player, syncSources, { flush: 'post' })
 
-watch(currentQuality, () => qualityButton?.updateButtonText(), { flush: 'sync' })
+watch(currentQuality, () => qualityButton?.updateButtonText(), {
+  flush: 'sync'
+})
 
 // 键盘事件处理
 const handleKeydown = (event: KeyboardEvent) => {
   if (!player.value) return
-  
+
   // 如果焦点在输入框或文本区域，不处理键盘事件
   const target = event.target as HTMLElement
   if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
     return
   }
-  
+
   switch (event.code) {
     case 'Space':
       // 空格键：播放/暂停
@@ -101,14 +114,14 @@ const handleKeydown = (event: KeyboardEvent) => {
         player.value.pause()
       }
       break
-      
+
     case 'ArrowLeft':
       // 左方向键：后退5秒
       event.preventDefault()
       const currentTimeLeft = player.value.currentTime() ?? 0
       player.value.currentTime(Math.max(0, currentTimeLeft - 3))
       break
-      
+
     case 'ArrowRight':
       // 右方向键：前进5秒
       event.preventDefault()
@@ -116,14 +129,14 @@ const handleKeydown = (event: KeyboardEvent) => {
       const duration = player.value.duration() ?? 0
       player.value.currentTime(Math.min(duration, currentTimeRight + 3))
       break
-      
+
     case 'ArrowUp':
       // 上方向键：增加音量（可选）
       event.preventDefault()
       const currentVolume = player.value.volume() ?? 1
       player.value.volume(Math.min(1, currentVolume + 0.1))
       break
-      
+
     case 'ArrowDown':
       // 下方向键：减少音量（可选）
       event.preventDefault()
@@ -135,93 +148,100 @@ const handleKeydown = (event: KeyboardEvent) => {
 
 // 创建清晰度选择组件
 const createQualityComponents = () => {
-  const MenuButton = videojs.getComponent('MenuButton') as unknown as typeof MenuButtonType
+  const MenuButton = videojs.getComponent(
+    'MenuButton'
+  ) as unknown as typeof MenuButtonType
   const MenuItem = videojs.getComponent('MenuItem') as typeof MenuItemType
 
   // 清晰度菜单项
-class QualityMenuItem extends MenuItem {
-  qualityIndex: number
-  qualityLabel: string
-  constructor(player: Player, options: QualityOptions) {
-    super(player, { ...options, selectable: true })
-    this.qualityIndex = options.qualityIndex
-    this.qualityLabel = options.qualityLabel
-    this.selected(this.qualityIndex === currentQuality.value)
-  }
-
-  handleClick() {
-    const source = sources.value[this.qualityIndex]
-    const previousSource = sources.value[currentQuality.value]
-    if (!source || !previousSource || this.qualityIndex === currentQuality.value) {
-      return
+  class QualityMenuItem extends MenuItem {
+    qualityIndex: number
+    qualityLabel: string
+    constructor(player: Player, options: QualityOptions) {
+      super(player, { ...options, selectable: true })
+      this.qualityIndex = options.qualityIndex
+      this.qualityLabel = options.qualityLabel
+      this.selected(this.qualityIndex === currentQuality.value)
     }
 
-    cancelQualitySwitch?.()
-    const instance = this.player()
-    const previousQuality = currentQuality.value
-    const currentTime = instance.currentTime() ?? 0
-    const wasPaused = instance.paused()
-    const currentRate = instance.playbackRate() ?? 1
-    const hadStarted = instance.hasClass('vjs-has-started')
+    handleClick() {
+      const source = sources.value[this.qualityIndex]
+      const previousSource = sources.value[currentQuality.value]
+      if (
+        !source ||
+        !previousSource ||
+        this.qualityIndex === currentQuality.value
+      ) {
+        return
+      }
 
-    const restorePlayback = () => {
-      instance.currentTime(currentTime)
-      instance.playbackRate(currentRate)
-      instance.hasStarted(hadStarted)
-      if (!wasPaused) {
-        instance.play()?.catch((error: Error) => {
-          // A new switch or pause can cancel the pending playback request.
-          if (error.name !== 'AbortError') console.error('恢复播放失败:', error)
+      cancelQualitySwitch?.()
+      const instance = this.player()
+      const previousQuality = currentQuality.value
+      const currentTime = instance.currentTime() ?? 0
+      const wasPaused = instance.paused()
+      const currentRate = instance.playbackRate() ?? 1
+      const hadStarted = instance.hasClass('vjs-has-started')
+
+      const restorePlayback = () => {
+        instance.currentTime(currentTime)
+        instance.playbackRate(currentRate)
+        instance.hasStarted(hadStarted)
+        if (!wasPaused) {
+          instance.play()?.catch((error: Error) => {
+            // A new switch or pause can cancel the pending playback request.
+            if (error.name !== 'AbortError')
+              console.error('恢复播放失败:', error)
+          })
+        }
+      }
+
+      const cleanup = () => {
+        instance.off('loadedmetadata', onLoadedMetadata)
+        instance.off('loadedmetadata', onFallbackLoaded)
+        instance.off('error', onError)
+        if (cancelQualitySwitch === cleanup) cancelQualitySwitch = null
+      }
+
+      // 先更新选中状态和索引
+      currentQuality.value = this.qualityIndex
+
+      // 监听加载成功
+      const onLoadedMetadata = () => {
+        cleanup()
+        restorePlayback()
+      }
+
+      const onFallbackLoaded = () => {
+        cleanup()
+        restorePlayback()
+      }
+
+      // 监听加载失败
+      const onError = () => {
+        console.error(`清晰度 ${source.label} 加载失败:`, instance.error())
+        cleanup()
+
+        // 回退到之前的清晰度
+        currentQuality.value = previousQuality
+        cancelQualitySwitch = cleanup
+        instance.one('loadedmetadata', onFallbackLoaded)
+        instance.src({ src: previousSource.src, type: previousSource.type })
+
+        // 显示错误提示（可选）
+        instance.trigger('qualitySwitchError', {
+          attemptedQuality: source.label,
+          fallbackQuality: previousSource.label
         })
       }
-    }
 
-    const cleanup = () => {
-      instance.off('loadedmetadata', onLoadedMetadata)
-      instance.off('loadedmetadata', onFallbackLoaded)
-      instance.off('error', onError)
-      if (cancelQualitySwitch === cleanup) cancelQualitySwitch = null
-    }
-
-    // 先更新选中状态和索引
-    currentQuality.value = this.qualityIndex
-    
-    // 监听加载成功
-    const onLoadedMetadata = () => {
-      cleanup()
-      restorePlayback()
-    }
-
-    const onFallbackLoaded = () => {
-      cleanup()
-      restorePlayback()
-    }
-    
-    // 监听加载失败
-    const onError = () => {
-      console.error(`清晰度 ${source.label} 加载失败:`, instance.error())
-      cleanup()
-      
-      // 回退到之前的清晰度
-      currentQuality.value = previousQuality
+      // 添加监听
       cancelQualitySwitch = cleanup
-      instance.one('loadedmetadata', onFallbackLoaded)
-      instance.src({ src: previousSource.src, type: previousSource.type })
-      
-      // 显示错误提示（可选）
-      instance.trigger('qualitySwitchError', {
-        attemptedQuality: source.label,
-        fallbackQuality: previousSource.label
-      })
+      instance.one('loadedmetadata', onLoadedMetadata)
+      instance.one('error', onError)
+      instance.src({ src: source.src, type: source.type })
     }
-    
-    // 添加监听
-    cancelQualitySwitch = cleanup
-    instance.one('loadedmetadata', onLoadedMetadata)
-    instance.one('error', onError)
-    instance.src({ src: source.src, type: source.type })
   }
-}
 
   // 清晰度菜单按钮
   class QualityMenuButton extends MenuButton {
@@ -256,7 +276,9 @@ class QualityMenuItem extends MenuItem {
 
     updateButtonText() {
       const items = (this as unknown as QualityButton).items
-      items?.forEach(item => item.selected(item.qualityIndex === currentQuality.value))
+      items?.forEach((item) =>
+        item.selected(item.qualityIndex === currentQuality.value)
+      )
       // 安全检查：确保 sources 和当前索引有效
       if (!sources.value.length || !sources.value[currentQuality.value]) {
         return
@@ -293,8 +315,12 @@ const syncQualityButton = (rebuildMenu = false) => {
 
   if (!qualityButton) {
     const QualityMenuButton = createQualityComponents()
-    const nextControl = controlBar.getChild('PictureInPictureToggle') || controlBar.getChild('FullscreenToggle')
-    const insertIndex = nextControl ? controlBar.children().indexOf(nextControl) : controlBar.children().length
+    const nextControl =
+      controlBar.getChild('PictureInPictureToggle') ||
+      controlBar.getChild('FullscreenToggle')
+    const insertIndex = nextControl
+      ? controlBar.children().indexOf(nextControl)
+      : controlBar.children().length
     qualityButton = controlBar.addChild(
       new QualityMenuButton(instance, {}) as unknown as Component,
       {},
@@ -317,7 +343,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)
   cancelQualitySwitch?.()
   qualityButton = null
-  
+
   if (player.value) {
     // 调用自定义清理函数
     if (player.value._customCleanup) {
@@ -335,7 +361,7 @@ const handleMounted = ({ player: videoPlayer }: { player: Player }) => {
 
 const handleReady = () => {
   console.log('播放器已就绪')
-  
+
   const instance = player.value
   if (!instance || instance.isDisposed()) return
   // Video.js emits ready again after loading a new source. Setup must be
@@ -344,32 +370,33 @@ const handleReady = () => {
     syncQualityButton()
     return
   }
-  
+
   try {
     // 设置用户不活动超时时间（1秒后隐藏控制栏）
     instance.options_.inactivityTimeout = 1000
-    
+
     // 确保控制栏自动隐藏功能启用
     instance.options({
       userActions: {
         hotkeys: false // 禁用默认热键，使用我们自定义的
       }
     })
-    
+
     // 手动触发用户活动，确保控制栏显示逻辑正常
     instance.userActive(true)
-    
+
     const controlBar = instance.controlBar
 
-    
     const volumePanel = controlBar.getChild('VolumePanel')
-    
+
     if (volumePanel) {
       controlBar.removeChild(volumePanel)
       const playbackRateMenu = controlBar.getChild('PlaybackRateMenuButton')
-      
+
       if (playbackRateMenu) {
-        const playbackRateIndex = controlBar.children().indexOf(playbackRateMenu)
+        const playbackRateIndex = controlBar
+          .children()
+          .indexOf(playbackRateMenu)
         controlBar.addChild(volumePanel, {}, playbackRateIndex)
       } else {
         const insertIndex = controlBar.children().length - 1
@@ -385,7 +412,7 @@ const handleReady = () => {
       const target = e.target as HTMLElement
       if (
         target.classList.contains('vjs-control') || // 普通控件
-        target.closest('.vjs-menu-button') ||       // 菜单类控件（倍速、清晰度等）
+        target.closest('.vjs-menu-button') || // 菜单类控件（倍速、清晰度等）
         target.classList.contains('vjs-picture-in-picture-control') ||
         target.classList.contains('vjs-fullscreen-control')
       ) {
@@ -394,7 +421,7 @@ const handleReady = () => {
       }
     }
     playerEl.addEventListener('focus', handleFocus, true)
-    
+
     // 重要：移除之前可能存在的监听器，然后添加新的
     let inactivityTimer: ReturnType<typeof setTimeout> | null = null
     let rafId: number | null = null
@@ -460,11 +487,10 @@ const handleReady = () => {
       playerEl.removeEventListener('mouseleave', handleMouseLeave)
       playerEl.removeEventListener('mouseenter', handleMouseEnter)
     }
-    
+
     // 保存清理函数以便后续使用
     instance._customCleanup = cleanup
     syncQualityButton()
-
   } catch (error) {
     console.error('初始化清晰度按钮失败:', error)
   }
@@ -492,28 +518,28 @@ const handleReady = () => {
 }
 
 /* 绿色主题样式 */
-.theme-green {
-  --theme-green: #00d084;
-  --theme-green-dark: #00a86b;
-  --theme-green-light: #00f5a0;
+.theme-archive {
+  --theme-accent: #64c7e1;
+  --theme-accent-dark: #3294ae;
+  --theme-accent-light: #b5e7f3;
 }
 
 /* 控制栏尺寸调整 */
-.theme-green .vjs-control-bar {
+.theme-archive .vjs-control-bar {
   height: 3.5em;
   font-size: 14px;
   background: rgba(0, 0, 0, 0);
 }
 
 /* 按钮尺寸 */
-.theme-green .vjs-control {
+.theme-archive .vjs-control {
   width: 3.5em;
 }
 
 /* 大播放按钮 - 绿色 */
-.theme-green .vjs-big-play-button {
-  background-color: rgba(0, 208, 132, 0.7);
-  border: 0.06666em solid rgba(0, 208, 132, 0.8);
+.theme-archive .vjs-big-play-button {
+  background-color: rgba(100, 199, 225, 0.7);
+  border: 0.06666em solid rgba(100, 199, 225, 0.8);
   border-radius: 50%;
   width: 2em;
   height: 2em;
@@ -522,70 +548,70 @@ const handleReady = () => {
   transition: all 0.3s;
 }
 
-.theme-green .vjs-big-play-button:hover {
-  background-color: rgba(0, 245, 160, 0.8);
-  border-color: #00f5a0;
+.theme-archive .vjs-big-play-button:hover {
+  background-color: rgba(100, 199, 225, 0.8);
+  border-color: #b5e7f3;
   transform: scale(1.1);
 }
 
 /* 进度条 */
-.theme-green .vjs-progress-holder {
+.theme-archive .vjs-progress-holder {
   height: 0.5em;
 }
 
-.theme-green .vjs-play-progress {
-  background-color: #00d084;
+.theme-archive .vjs-play-progress {
+  background-color: #64c7e1;
 }
 
-.theme-green .vjs-play-progress:before {
-  color: #00f5a0;
+.theme-archive .vjs-play-progress:before {
+  color: #b5e7f3;
   font-size: 1.2em;
-  text-shadow: 0 0 0.5em rgba(0, 245, 160, 0.8);
+  text-shadow: 0 0 0.5em rgba(100, 199, 225, 0.8);
 }
 
-.theme-green .vjs-load-progress {
-  background: rgba(0, 208, 132, 0.3);
+.theme-archive .vjs-load-progress {
+  background: rgba(100, 199, 225, 0.3);
 }
 
 /* 音量条 */
-.theme-green .vjs-volume-level {
-  background-color: #00d084;
+.theme-archive .vjs-volume-level {
+  background-color: #64c7e1;
 }
 
-.theme-green .vjs-volume-level:before {
-  color: #00f5a0;
+.theme-archive .vjs-volume-level:before {
+  color: #b5e7f3;
 }
 
 /* 按钮悬停效果 */
-.theme-green .vjs-control:hover {
-  color: #00f5a0;
-  text-shadow: 0 0 0.5em rgba(0, 245, 160, 0.5);
+.theme-archive .vjs-control:hover {
+  color: #b5e7f3;
+  text-shadow: 0 0 0.5em rgba(100, 199, 225, 0.5);
 }
 
 /* 菜单背景半透明 */
-.theme-green .vjs-menu .vjs-menu-content{
+.theme-archive .vjs-menu .vjs-menu-content {
   background-color: rgba(101, 255, 124, 0.1);
 }
 
 /* 菜单项选中状态 */
-.theme-green .vjs-menu li.vjs-selected,
-.theme-green .vjs-menu li.vjs-selected:focus,
-.theme-green .vjs-menu li.vjs-selected:hover {
-  background-color: rgba(0, 208, 132, 0.6);
+.theme-archive .vjs-menu li.vjs-selected,
+.theme-archive .vjs-menu li.vjs-selected:focus,
+.theme-archive .vjs-menu li.vjs-selected:hover {
+  background-color: rgba(100, 199, 225, 0.6);
   color: #fff;
 }
 
 /* 菜单项悬停 */
-.theme-green .vjs-menu li:hover {
-  background-color: rgba(0, 208, 132, 0.3);
+.theme-archive .vjs-menu li:hover {
+  background-color: rgba(100, 199, 225, 0.3);
 }
 
 /* 时间提示 */
-.theme-green .vjs-time-tooltip,
-.theme-green .vjs-mouse-display .vjs-time-tooltip {
-  background-color: rgba(0, 208, 132, 0.9);
+.theme-archive .vjs-time-tooltip,
+.theme-archive .vjs-mouse-display .vjs-time-tooltip {
+  background-color: rgba(100, 199, 225, 0.9);
   color: #fff;
-  border-radius: 0.3em;
+  border-radius: 0;
 }
 
 /* 清晰度按钮样式 */
@@ -611,14 +637,14 @@ const handleReady = () => {
   font-size: 1em;
 }
 
-.theme-green .vjs-quality-menu-button .vjs-menu .vjs-menu-item.vjs-selected {
-  background-color: rgba(0, 208, 132, 0.6);
+.theme-archive .vjs-quality-menu-button .vjs-menu .vjs-menu-item.vjs-selected {
+  background-color: rgba(100, 199, 225, 0.6);
   color: #fff;
 }
 
 .vjs-quality-menu-button .vjs-menu .vjs-menu-item.vjs-selected::before {
-  content: "✓ ";
-  color: #00f5a0;
+  content: '✓ ';
+  color: #b5e7f3;
 }
 
 /* 确保播放速度按钮显示 */
@@ -652,14 +678,14 @@ const handleReady = () => {
 
 /* 响应式 */
 @media (max-width: 768px) {
-  .theme-green .vjs-control-bar {
+  .theme-archive .vjs-control-bar {
     font-size: 12px;
   }
-  
+
   .vjs-quality-menu-button .vjs-icon-placeholder::before {
     font-size: 1.3em;
   }
-  
+
   .vjs-quality-menu-button .vjs-menu-button-text {
     display: none;
   }

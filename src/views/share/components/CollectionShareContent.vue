@@ -6,30 +6,43 @@
     </div>
 
     <n-space vertical :size="12" style="margin-top: 16px">
-      <n-flex align="center" :wrap="false" :size="8">
-        <n-h3 style="margin: 0; flex: 1 1 auto;">{{ collection.name }}</n-h3>
-        <n-tag size="small" :bordered="false" :type="collectionType === 'image' ? 'success' : 'info'">
-          {{ collectionType === 'image' ? '图片合集' : '视频合集' }} · 共 {{ items.length }} 项
+      <n-flex align="center" :wrap="true" :size="8">
+        <n-h3 style="margin: 0; flex: 1 1 auto">{{ collection.name }}</n-h3>
+        <n-tag size="small" :bordered="false" type="info">
+          {{ collectionType === 'image' ? '图片合集' : '视频合集' }} · 共
+          {{ items.length }} 项
         </n-tag>
       </n-flex>
-      <n-text v-if="collection.description" depth="2">{{ collection.description }}</n-text>
+      <n-text v-if="collection.description" depth="2">{{
+        collection.description
+      }}</n-text>
       <n-text depth="3" style="font-size: 13px">
         创建于 {{ formatDate(collection.createdAt) }}
       </n-text>
     </n-space>
 
     <!-- 子项网格 -->
-    <n-divider v-if="items.length" style="margin: 24px 0 16px;">合集内容</n-divider>
+    <n-divider v-if="items.length" style="margin: 24px 0 16px"
+      >合集内容</n-divider
+    >
 
     <div v-if="items.length === 0 && !legacyOnly" class="empty-items">
       <n-empty description="该合集还没有内容" />
     </div>
 
-    <div v-else-if="items.length" class="items-grid" :class="`items-grid--${collectionType}`">
+    <div
+      v-else-if="items.length"
+      class="items-grid"
+      :class="`items-grid--${collectionType}`"
+    >
       <div
         v-for="item in items"
         :key="item.id"
         class="item-card"
+        role="button"
+        tabindex="0"
+        @keydown.enter="openItem(item)"
+        @keydown.space.prevent="openItem(item)"
         :title="`查看${collectionType === 'video' ? '视频' : '图片'}详情`"
         @click="openItem(item)"
       >
@@ -51,13 +64,23 @@
             </svg>
           </div>
         </div>
-        <div class="item-title" :title="getItemTitle(item)">{{ getItemTitle(item) }}</div>
+        <div class="item-title" :title="getItemTitle(item)">
+          {{ getItemTitle(item) }}
+        </div>
       </div>
     </div>
   </n-card>
-  <n-modal v-model:show="previewOpen" preset="card" :title="getItemTitle(selectedItem)" style="width: 90vw; max-width: 1100px;">
+  <n-modal
+    v-model:show="previewOpen"
+    preset="card"
+    :title="getItemTitle(selectedItem)"
+    style="width: 90vw; max-width: 1100px"
+  >
     <template v-if="selectedItem">
-      <VideoShareContent v-if="collectionType === 'video'" :content="selectedItem" />
+      <VideoShareContent
+        v-if="collectionType === 'video'"
+        :content="selectedItem"
+      />
       <ImageShareContent v-else :content="selectedItem" />
     </template>
   </n-modal>
@@ -68,7 +91,15 @@ import { computed, ref } from 'vue'
 import ImageShareContent from './ImageShareContent.vue'
 import VideoShareContent from './VideoShareContent.vue'
 import {
-  NCard, NSpace, NFlex, NH3, NText, NTag, NDivider, NEmpty, NModal
+  NCard,
+  NSpace,
+  NFlex,
+  NH3,
+  NText,
+  NTag,
+  NDivider,
+  NEmpty,
+  NModal
 } from 'naive-ui'
 
 /**
@@ -145,16 +176,18 @@ function openItem(item: any) {
 function formatDate(dateStr: string) {
   if (!dateStr) return ''
   return new Date(dateStr).toLocaleDateString('zh-CN', {
-    year: 'numeric', month: 'long', day: 'numeric'
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
   })
 }
 </script>
 
 <style scoped>
 .collection-cover {
-  border-radius: 8px;
+  border-radius: 0;
   overflow: hidden;
-  background: #f0f0f0;
+  background: var(--bg);
 }
 
 .collection-cover img {
@@ -180,17 +213,19 @@ function formatDate(dateStr: string) {
 }
 
 .item-card {
-  background: var(--n-card-color, #fff);
-  border: 1px solid var(--n-border-color, #e8e8e8);
-  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0;
   overflow: hidden;
   cursor: pointer;
-  transition: transform 0.18s, box-shadow 0.18s;
+  transition:
+    transform 0.18s,
+    box-shadow 0.18s;
 }
 
 .item-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.10);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
 }
 
 .item-cover {
@@ -244,6 +279,6 @@ function formatDate(dateStr: string) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--n-text-color-1);
+  color: var(--text);
 }
 </style>

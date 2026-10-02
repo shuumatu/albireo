@@ -2,14 +2,14 @@
   <div class="share-page">
     <!-- 顶栏 -->
     <header class="share-topbar">
-      <span class="brand-name" @click="router.push('/')">Albireo</span>
-      <n-text depth="3" class="topbar-tag">分享内容</n-text>
+      <router-link class="brand-name" to="/">ALBIREO ／</router-link>
+      <n-text depth="3" class="topbar-tag">SHARED ARCHIVE</n-text>
     </header>
 
     <!-- 加载状态 -->
     <div v-if="loading" class="share-center">
       <n-spin size="large" />
-      <n-text depth="3" style="margin-top: 16px;">正在加载分享内容…</n-text>
+      <n-text depth="3" style="margin-top: 16px">正在加载分享内容…</n-text>
     </div>
 
     <!-- 错误状态 -->
@@ -35,13 +35,18 @@
           </svg>
         </div>
         <h2 class="password-title">该分享需要密码访问</h2>
-        <n-space vertical :size="14" style="margin-top: 18px;">
-          <p v-if="shareData?.title" class="share-title">{{ shareData.title }}</p>
-          <p v-if="shareData?.description" class="share-desc">{{ shareData.description }}</p>
+        <n-space vertical :size="14" style="margin-top: 18px">
+          <p v-if="shareData?.title" class="share-title">
+            {{ shareData.title }}
+          </p>
+          <p v-if="shareData?.description" class="share-desc">
+            {{ shareData.description }}
+          </p>
           <n-input
             v-model:value="passwordInput"
             type="password"
             placeholder="请输入访问密码"
+            :input-props="{ 'aria-label': '访问密码' }"
             show-password-on="click"
             size="large"
             :status="passwordError ? 'error' : undefined"
@@ -49,7 +54,13 @@
             @keyup.enter="submitPassword"
           />
           <p v-if="passwordError" class="password-error">{{ passwordError }}</p>
-          <n-button type="primary" block size="large" :loading="submitting" @click="submitPassword">
+          <n-button
+            type="primary"
+            block
+            size="large"
+            :loading="submitting"
+            @click="submitPassword"
+          >
             确认访问
           </n-button>
         </n-space>
@@ -59,11 +70,18 @@
     <!-- 分享内容展示 -->
     <div v-else-if="shareData?.content" class="share-content-wrapper">
       <header class="share-header">
-        <n-tag size="small" :type="targetTagType" :bordered="false" style="margin-bottom: 12px;">
+        <n-tag
+          size="small"
+          type="info"
+          :bordered="false"
+          style="margin-bottom: 12px"
+        >
           {{ targetTypeLabel }}
         </n-tag>
         <h1 class="share-main-title">{{ shareData.title || defaultTitle }}</h1>
-        <p v-if="shareData.description" class="share-main-desc">{{ shareData.description }}</p>
+        <p v-if="shareData.description" class="share-main-desc">
+          {{ shareData.description }}
+        </p>
       </header>
 
       <main class="share-main">
@@ -82,7 +100,7 @@
       </main>
 
       <footer class="share-footer">
-        <n-text depth="3" style="font-size: 12px;">
+        <n-text depth="3" style="font-size: 12px">
           通过 Albireo 分享链接查看 · 内容由分享者发布，请遵守相关法律法规
         </n-text>
       </footer>
@@ -94,7 +112,14 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  NSpin, NResult, NButton, NCard, NInput, NSpace, NTag, NText
+  NSpin,
+  NResult,
+  NButton,
+  NCard,
+  NInput,
+  NSpace,
+  NTag,
+  NText
 } from 'naive-ui'
 import { getShareMeta, accessShareWithPassword } from '../../api/share'
 import type { ShareAccessVO } from '../../api/share'
@@ -118,17 +143,13 @@ const shareCode = route.params.shareCode as string
 
 const targetTypeLabel = computed(() => {
   if (!shareData.value) return ''
-  return shareData.value.targetType === 'video' ? '视频'
-    : shareData.value.targetType === 'image' ? '图片'
-    : '合集'
+  return shareData.value.targetType === 'video'
+    ? '视频'
+    : shareData.value.targetType === 'image'
+      ? '图片'
+      : '合集'
 })
 
-const targetTagType = computed<'info' | 'success' | 'warning'>(() => {
-  if (!shareData.value) return 'info'
-  return shareData.value.targetType === 'video' ? 'info'
-    : shareData.value.targetType === 'image' ? 'success'
-    : 'warning'
-})
 
 const defaultTitle = computed(() => {
   if (!shareData.value) return '分享内容'
@@ -151,7 +172,9 @@ watch(shareData, () => {
 onMounted(async () => {
   try {
     const data = await getShareMeta(shareCode)
-    shareData.value = data.needPassword ? data : await accessShareWithPassword(shareCode, '')
+    shareData.value = data.needPassword
+      ? data
+      : await accessShareWithPassword(shareCode, '')
     needPassword.value = data.needPassword
     applyDocumentTitle()
   } catch (e: any) {
@@ -191,170 +214,116 @@ async function submitPassword() {
 </script>
 
 <style scoped>
-/*
-  全局 App.vue 把 html / body / #app 都设为 overflow:hidden + 100vh，
-  这意味着 ShareView 自己必须建立一个可滚动的视口，否则合集分享子项一多就被裁掉。
-  这里用 height:100% + overflow-y:auto 让分享页内部成为滚动容器。
-*/
 .share-page {
-  height: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  background:
-    radial-gradient(ellipse at top, rgba(64, 158, 255, 0.08), transparent 60%),
-    linear-gradient(180deg, #f8fafc 0%, #eef2f6 100%);
+  background: var(--bg);
 }
-
-/* 顶栏 */
 .share-topbar {
+  padding: 26px 6%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 24px;
-  background: rgba(255, 255, 255, 0.6);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid var(--line);
 }
-
 .brand-name {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1f2937;
-  letter-spacing: 0.3px;
-  cursor: pointer;
-  user-select: none;
+  font: 700 20px var(--mono);
+  letter-spacing: 3px;
 }
-
 .topbar-tag {
-  font-size: 13px;
+  font: 10px var(--mono);
+  letter-spacing: 2px;
 }
-
-/* 居中态：加载 / 错误 / 密码 */
 .share-center {
-  flex: 1 1 auto;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: center;
-  padding: 40px 20px;
+  justify-content: center;
+  padding: 48px 20px;
 }
-
-/* 错误卡 */
-.error-card {
-  width: 100%;
-  max-width: 460px;
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
-}
-
-/* 密码卡 */
+.error-card,
 .password-card {
-  width: 100%;
-  max-width: 420px;
-  padding: 28px 8px 8px;
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
-  text-align: center;
+  max-width: 460px;
+  border: 1px solid var(--line);
+  border-radius: 0;
 }
-
+.password-card {
+  text-align: center;
+  padding: 20px 8px;
+}
 .password-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  color: var(--accent);
   width: 72px;
   height: 72px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, rgba(64, 158, 255, 0.12), rgba(102, 126, 234, 0.12));
-  color: #409eff;
-  margin: 0 auto;
+  display: grid;
+  place-items: center;
+  margin: auto;
+  border: 1px solid var(--line);
+  background: var(--surface-raised);
 }
-
 .password-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 16px 0 0;
-  color: #1f2937;
+  font-size: 20px;
+  margin: 24px 0 0;
 }
-
 .share-title {
   font-size: 16px;
-  font-weight: 500;
   margin: 0;
-  color: #374151;
-  text-align: center;
 }
-
-.share-desc {
-  color: #6b7280;
-  margin: 0;
-  font-size: 13px;
-  text-align: center;
-}
-
-.password-error {
-  margin: 0;
-  color: #ef4444;
-  font-size: 13px;
-  text-align: left;
-}
-
-/* 内容展示区 */
-.share-content-wrapper {
-  flex: 1 1 auto;
-  width: 100%;
-  max-width: 980px;
-  margin: 0 auto;
-  padding: 32px 20px 60px;
-}
-
-.share-header {
-  text-align: center;
-  margin-bottom: 28px;
-}
-
-.share-main-title {
-  font-size: 28px;
-  font-weight: 700;
-  margin: 0 0 10px 0;
-  color: #1f2937;
-  letter-spacing: 0.3px;
-}
-
+.share-desc,
 .share-main-desc {
-  color: #6b7280;
-  margin: 0;
-  font-size: 15px;
-  line-height: 1.6;
-  max-width: 720px;
-  margin-left: auto;
-  margin-right: auto;
+  color: var(--muted);
+  line-height: 1.8;
 }
-
-.share-main {
+.password-error {
+  color: #ec969a;
+  text-align: left;
+  margin: 0;
+}
+.share-content-wrapper {
+  width: 100%;
+  max-width: 1200px;
+  margin: auto;
+  padding: 56px 32px;
+}
+.share-header {
+  border-left: 3px solid var(--accent);
+  padding-left: 24px;
   margin-bottom: 36px;
 }
-
-.share-footer {
-  text-align: center;
-  padding: 24px 0 0;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
+.share-main-title {
+  font-size: clamp(26px, 4vw, 40px);
+  letter-spacing: 2px;
+  margin: 8px 0 16px;
+  overflow-wrap: anywhere;
 }
-
+.share-main-desc {
+  max-width: 720px;
+}
+.share-footer {
+  margin-top: 48px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
 @media (max-width: 640px) {
   .share-topbar {
-    padding: 12px 16px;
+    padding: 22px 20px;
+  }
+  .brand-name {
+    font-size: 16px;
+  }
+  .topbar-tag {
+    font-size: 8px;
   }
   .share-content-wrapper {
-    padding: 20px 14px 40px;
+    padding: 32px 20px;
   }
-  .share-main-title {
-    font-size: 22px;
+  .share-header {
+    padding-left: 16px;
   }
-  .password-card {
-    max-width: 100%;
+  .share-main :deep(.n-card__content) {
+    padding: 16px;
   }
 }
 </style>

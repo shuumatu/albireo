@@ -11,7 +11,14 @@
           <div class="header-sub">
             <n-icon :component="TimeOutline" :size="11" />
             <span>{{ spanLabel }}</span>
-            <span v-if="!isFullRange" class="reset-link" @click="resetRange">重置</span>
+            <button
+              v-if="!isFullRange"
+              type="button"
+              class="reset-link"
+              @click="resetRange"
+            >
+              重置
+            </button>
           </div>
         </div>
         <div class="header-right">
@@ -31,7 +38,10 @@
             :aria-label="collapsed ? '展开时间轴' : '收起时间轴'"
             @click="collapsed = !collapsed"
           >
-            <n-icon :component="collapsed ? ChevronUp : ChevronDown" :size="16" />
+            <n-icon
+              :component="collapsed ? ChevronUp : ChevronDown"
+              :size="16"
+            />
           </button>
         </div>
       </header>
@@ -50,6 +60,14 @@
             <div
               class="timeline-handle"
               :style="startHandleStyle"
+              role="slider"
+              tabindex="0"
+              aria-label="起始日期"
+              :aria-valuemin="0"
+              :aria-valuemax="Math.round((rangeEnd - 0.01) * 100)"
+              :aria-valuenow="Math.round(rangeStart * 100)"
+              :aria-valuetext="formatDate(selectedStartTime)"
+              @keydown="keyRange($event, 'start')"
               @pointerdown.stop="onStartPointerDown"
             >
               <div class="handle-bar" />
@@ -58,6 +76,14 @@
             <div
               class="timeline-handle"
               :style="endHandleStyle"
+              role="slider"
+              tabindex="0"
+              aria-label="结束日期"
+              :aria-valuemin="Math.round((rangeStart + 0.01) * 100)"
+              :aria-valuemax="100"
+              :aria-valuenow="Math.round(rangeEnd * 100)"
+              :aria-valuetext="formatDate(selectedEndTime)"
+              @keydown="keyRange($event, 'end')"
               @pointerdown.stop="onEndPointerDown"
             >
               <div class="handle-bar" />
@@ -86,11 +112,7 @@
 
     <Teleport :to="tooltipTarget">
       <Transition name="tooltip-fade">
-        <div
-          v-if="dragMode"
-          class="handle-tooltip"
-          :style="tooltipStyle"
-        >
+        <div v-if="dragMode" class="handle-tooltip" :style="tooltipStyle">
           <div class="tooltip-label">{{ tooltipLabel }}</div>
           <div class="tooltip-time">{{ formatDateFull(tooltipTime) }}</div>
         </div>
@@ -107,7 +129,7 @@ import {
   ImageOutline,
   TimeOutline,
   ChevronUp,
-  ChevronDown,
+  ChevronDown
 } from '@vicons/ionicons5'
 
 interface Props {
@@ -123,7 +145,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  tooltipTarget: 'body',
+  tooltipTarget: 'body'
 })
 
 const emit = defineEmits<{
@@ -137,31 +159,64 @@ defineExpose({
   /**
    * 数据回填后让父组件触发一次密度图重绘（容器宽度 / DPR 变了也用同一接口）
    */
-  redraw: () => nextTick(drawDensity),
+  redraw: () => nextTick(drawDensity)
 })
 
 const trackRef = ref<HTMLDivElement | null>(null)
 const densityCanvas = ref<HTMLCanvasElement | null>(null)
 const collapsed = ref(false)
 const MIN_RANGE = 0.01
+function keyRange(event: KeyboardEvent, edge: 'start' | 'end') {
+  if (
+    ![
+      'ArrowLeft',
+      'ArrowRight',
+      'ArrowUp',
+      'ArrowDown',
+      'Home',
+      'End'
+    ].includes(event.key)
+  )
+    return
+  event.preventDefault()
+  const min = edge === 'start' ? 0 : props.rangeStart + MIN_RANGE,
+    max = edge === 'start' ? props.rangeEnd - MIN_RANGE : 1
+  const current = edge === 'start' ? props.rangeStart : props.rangeEnd
+  const step = event.shiftKey ? 0.1 : 0.01
+  const value =
+    event.key === 'Home'
+      ? min
+      : event.key === 'End'
+        ? max
+        : current +
+          (['ArrowRight', 'ArrowUp'].includes(event.key) ? step : -step)
+  if (edge === 'start')
+    emit('update:rangeStart', Math.max(min, Math.min(max, value)))
+  else emit('update:rangeEnd', Math.max(min, Math.min(max, value)))
+  emit('dragEnd')
+}
 
-const selectedStartTime = computed(() =>
-  props.globalMinTime + props.rangeStart * (props.globalMaxTime - props.globalMinTime)
+const selectedStartTime = computed(
+  () =>
+    props.globalMinTime +
+    props.rangeStart * (props.globalMaxTime - props.globalMinTime)
 )
-const selectedEndTime = computed(() =>
-  props.globalMinTime + props.rangeEnd * (props.globalMaxTime - props.globalMinTime)
+const selectedEndTime = computed(
+  () =>
+    props.globalMinTime +
+    props.rangeEnd * (props.globalMaxTime - props.globalMinTime)
 )
 const isFullRange = computed(() => props.rangeStart <= 0 && props.rangeEnd >= 1)
 
 const selectionStyle = computed(() => ({
   left: `${props.rangeStart * 100}%`,
-  width: `${(props.rangeEnd - props.rangeStart) * 100}%`,
+  width: `${(props.rangeEnd - props.rangeStart) * 100}%`
 }))
 const startHandleStyle = computed(() => ({
-  left: `${props.rangeStart * 100}%`,
+  left: `${props.rangeStart * 100}%`
 }))
 const endHandleStyle = computed(() => ({
-  left: `${props.rangeEnd * 100}%`,
+  left: `${props.rangeEnd * 100}%`
 }))
 
 // --- 时间轴拖拽 ---
@@ -228,9 +283,15 @@ function onPointerMove(e: PointerEvent) {
   const delta = (e.clientX - dragOriginX) / getTrackWidth()
 
   if (dragMode.value === 'start') {
-    emit('update:rangeStart', clamp(dragOriginStart + delta, 0, props.rangeEnd - MIN_RANGE))
+    emit(
+      'update:rangeStart',
+      clamp(dragOriginStart + delta, 0, props.rangeEnd - MIN_RANGE)
+    )
   } else if (dragMode.value === 'end') {
-    emit('update:rangeEnd', clamp(dragOriginEnd + delta, props.rangeStart + MIN_RANGE, 1))
+    emit(
+      'update:rangeEnd',
+      clamp(dragOriginEnd + delta, props.rangeStart + MIN_RANGE, 1)
+    )
   } else {
     const span = dragOriginEnd - dragOriginStart
     let newStart = dragOriginStart + delta
@@ -278,16 +339,20 @@ const tooltipTime = computed(() => {
 
 const tooltipLabel = computed(() => {
   switch (dragMode.value) {
-    case 'start': return '开始'
-    case 'end': return '结束'
-    case 'range': return '区间起'
-    default: return ''
+    case 'start':
+      return '开始'
+    case 'end':
+      return '结束'
+    case 'range':
+      return '区间起'
+    default:
+      return ''
   }
 })
 
 const tooltipStyle = computed(() => ({
   left: tooltipX.value + 'px',
-  top: tooltipY.value + 'px',
+  top: tooltipY.value + 'px'
 }))
 
 // --- 跨度文本 ---
@@ -307,7 +372,10 @@ const spanLabel = computed(() => {
 
 // --- 年份刻度 ---
 
-interface YearMark { year: number; left: number }
+interface YearMark {
+  year: number
+  left: number
+}
 
 const yearMarks = computed<YearMark[]>(() => {
   const span = props.globalMaxTime - props.globalMinTime
@@ -321,7 +389,8 @@ const yearMarks = computed<YearMark[]>(() => {
 
   const totalYears = endYear - startYear
   // 跨度太大的时候只取 N 年间隔，避免标签互相重叠
-  const step = totalYears <= 6 ? 1 : totalYears <= 12 ? 2 : Math.ceil(totalYears / 6)
+  const step =
+    totalYears <= 6 ? 1 : totalYears <= 12 ? 2 : Math.ceil(totalYears / 6)
 
   const marks: YearMark[] = []
   for (let y = startYear + 1; y < endYear; y += step) {
@@ -366,13 +435,18 @@ function drawDensity() {
     const y = rect.height - barH
     // 顶部圆角：用 fill + path roundRect (Chromium 99+ 普及)
     const grad = ctx.createLinearGradient(0, y, 0, rect.height)
-    grad.addColorStop(0, `rgba(24, 160, 88, ${(0.55 + t * 0.4).toFixed(3)})`)
-    grad.addColorStop(1, `rgba(24, 160, 88, ${(0.18 + t * 0.32).toFixed(3)})`)
+    grad.addColorStop(0, `rgba(100, 199, 225, ${(0.55 + t * 0.4).toFixed(3)})`)
+    grad.addColorStop(1, `rgba(100, 199, 225, ${(0.18 + t * 0.32).toFixed(3)})`)
     ctx.fillStyle = grad
 
     if (typeof ctx.roundRect === 'function') {
       ctx.beginPath()
-      ctx.roundRect(i * barW, y, Math.max(1, barW - 1), barH, [baseR, baseR, 0, 0])
+      ctx.roundRect(i * barW, y, Math.max(1, barW - 1), barH, [
+        baseR,
+        baseR,
+        0,
+        0
+      ])
       ctx.fill()
     } else {
       ctx.fillRect(i * barW, y, Math.max(1, barW - 1), barH)
@@ -382,7 +456,10 @@ function drawDensity() {
 
 let resizeObserver: ResizeObserver | null = null
 
-watch(() => props.densityBuckets, () => nextTick(drawDensity))
+watch(
+  () => props.densityBuckets,
+  () => nextTick(drawDensity)
+)
 watch(collapsed, () => nextTick(drawDensity))
 
 onMounted(() => {
@@ -418,8 +495,6 @@ function formatDateFull(ts: number): string {
 </script>
 
 <style scoped>
-@import './mapTokens.css';
-
 .time-axis {
   position: absolute;
   bottom: 12px;
@@ -548,7 +623,9 @@ function formatDateFull(ts: number): string {
   color: var(--map-text-tertiary);
   cursor: pointer;
   padding: 0;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .collapse-btn:hover {
@@ -586,28 +663,32 @@ function formatDateFull(ts: number): string {
   position: absolute;
   top: 0;
   bottom: 0;
-  background: rgba(24, 160, 88, 0.10);
+  background: rgba(100, 199, 225, 0.1);
   cursor: grab;
   z-index: 1;
-  border-top: 1px solid rgba(24, 160, 88, 0.45);
-  border-bottom: 1px solid rgba(24, 160, 88, 0.45);
+  border-top: 1px solid rgba(100, 199, 225, 0.45);
+  border-bottom: 1px solid rgba(100, 199, 225, 0.45);
   transition: background 0.15s ease;
 }
 
 .timeline-selection:hover {
-  background: rgba(24, 160, 88, 0.18);
+  background: rgba(100, 199, 225, 0.18);
 }
 
 .timeline-selection:active {
   cursor: grabbing;
-  background: rgba(24, 160, 88, 0.24);
+  background: rgba(100, 199, 225, 0.24);
 }
 
 .selection-glow {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(180deg, transparent 0%, rgba(24, 160, 88, 0.12) 100%);
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(100, 199, 225, 0.12) 100%
+  );
 }
 
 .timeline-handle {
@@ -633,7 +714,10 @@ function formatDateFull(ts: number): string {
   background: #fff;
   border-radius: 1px;
   box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
-  transition: width 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    width 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .handle-grip {
@@ -647,13 +731,17 @@ function formatDateFull(ts: number): string {
   border-radius: 4px;
   border: 2px solid #fff;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .timeline-handle:hover .handle-grip,
 .timeline-handle:active .handle-grip {
   transform: translate(-50%, -50%) scale(1.12);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.55), 0 0 0 4px rgba(24, 160, 88, 0.22);
+  box-shadow:
+    0 3px 10px rgba(0, 0, 0, 0.55),
+    0 0 0 4px rgba(100, 199, 225, 0.22);
 }
 
 .timeline-handle:hover .handle-bar,
@@ -770,12 +858,50 @@ function formatDateFull(ts: number): string {
 
 .tooltip-fade-enter-active,
 .tooltip-fade-leave-active {
-  transition: opacity 0.12s ease, transform 0.12s ease;
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
 }
 
 .tooltip-fade-enter-from,
 .tooltip-fade-leave-to {
   opacity: 0;
   transform: translate(-50%, 4px);
+}
+.reset-link {
+  border: 0;
+  background: none;
+  color: var(--accent);
+  min-height: 32px;
+  padding: 0 8px;
+  font: inherit;
+  cursor: pointer;
+}
+.collapse-btn {
+  width: 44px;
+  height: 44px;
+}
+.timeline-handle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.time-axis {
+  bottom: 34px;
+}
+@media (max-width: 719px) {
+  .timeline-panel {
+    border-radius: 0;
+  }
+  .time-axis {
+    left: 12px;
+    right: 12px;
+    bottom: 34px;
+  }
+  .header-range {
+    font-size: 11px;
+  }
+  .header-stats {
+    display: none;
+  }
 }
 </style>

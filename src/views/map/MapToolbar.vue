@@ -2,7 +2,12 @@
   <div class="map-toolbar glass-panel">
     <n-tooltip placement="left" :show-arrow="false">
       <template #trigger>
-        <button class="tool-btn" type="button" aria-label="放大" @click="$emit('zoomIn')">
+        <button
+          class="tool-btn"
+          type="button"
+          aria-label="放大"
+          @click="$emit('zoomIn')"
+        >
           <n-icon :component="AddOutline" :size="18" />
         </button>
       </template>
@@ -10,7 +15,12 @@
     </n-tooltip>
     <n-tooltip placement="left" :show-arrow="false">
       <template #trigger>
-        <button class="tool-btn" type="button" aria-label="缩小" @click="$emit('zoomOut')">
+        <button
+          class="tool-btn"
+          type="button"
+          aria-label="缩小"
+          @click="$emit('zoomOut')"
+        >
           <n-icon :component="RemoveOutline" :size="18" />
         </button>
       </template>
@@ -21,7 +31,12 @@
 
     <n-tooltip placement="left" :show-arrow="false">
       <template #trigger>
-        <button class="tool-btn" type="button" aria-label="回到默认视图" @click="$emit('home')">
+        <button
+          class="tool-btn"
+          type="button"
+          aria-label="回到默认视图"
+          @click="$emit('home')"
+        >
           <n-icon :component="LocateOutline" :size="18" />
         </button>
       </template>
@@ -29,8 +44,16 @@
     </n-tooltip>
     <n-tooltip placement="left" :show-arrow="false">
       <template #trigger>
-        <button class="tool-btn" type="button" :aria-label="isFullscreen ? '退出全屏' : '全屏'" @click="$emit('fullscreen')">
-          <n-icon :component="isFullscreen ? ContractOutline : ExpandOutline" :size="18" />
+        <button
+          class="tool-btn"
+          type="button"
+          :aria-label="isFullscreen ? '退出全屏' : '全屏'"
+          @click="$emit('fullscreen')"
+        >
+          <n-icon
+            :component="isFullscreen ? ContractOutline : ExpandOutline"
+            :size="18"
+          />
         </button>
       </template>
       {{ isFullscreen ? '退出全屏 (F)' : '全屏 (F)' }}
@@ -45,14 +68,14 @@ import {
   RemoveOutline,
   LocateOutline,
   ExpandOutline,
-  ContractOutline,
+  ContractOutline
 } from '@vicons/ionicons5'
 
 withDefaults(
   defineProps<{
     isFullscreen?: boolean
   }>(),
-  { isFullscreen: false },
+  { isFullscreen: false }
 )
 
 defineEmits<{
@@ -64,8 +87,6 @@ defineEmits<{
 </script>
 
 <style scoped>
-@import './mapTokens.css';
-
 .map-toolbar {
   display: inline-flex;
   flex-direction: column;
@@ -76,18 +97,21 @@ defineEmits<{
 }
 
 .tool-btn {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: none;
-  border-radius: 8px;
+  border-radius: 0;
   color: var(--map-text-secondary);
   cursor: pointer;
   padding: 0;
-  transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease;
 }
 
 .tool-btn:hover {

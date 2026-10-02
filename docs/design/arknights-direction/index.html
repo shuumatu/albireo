@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>ALBIREO · 影像档案 / HUD 设计预览</title>
+  <link rel="stylesheet" href="./prototype.css">
+  <link rel="stylesheet" href="./hud.css">
+</head>
+<body>
+  <a class="skip" href="#main">跳到内容</a>
+  <div class="review"><span>VISUAL ARCHIVE / REV.04</span><span>设计预览 · 演示信息</span><div class="review-controls"><button id="annotation-toggle" aria-pressed="false">查看装饰位置</button><button id="mobile-toggle" aria-pressed="false">手机预览</button></div></div>
+  <div id="site" class="site">
+    <header class="header">
+      <a class="brand" href="#home" aria-label="ALBIREO 首页"><span class="brand-mark" aria-hidden="true">A<span>／</span></span><span>ALBIREO<small>PERSONAL VISUAL ARCHIVE</small></span></a>
+      <nav aria-label="主导航">
+        <a href="#home" data-route="home" aria-current="page"><span>首页</span><small>INDEX</small></a>
+        <a href="#timeline" data-route="timeline"><span>时间线</span><small>TIMELINE</small></a>
+        <a href="#map" data-route="map"><span>地图</span><small>ATLAS</small></a>
+        <a href="#search" data-route="search"><span>搜索</span><small>SEARCH</small></a>
+      </nav>
+      <span class="header-sign">光影 / 足迹 / 记忆</span>
+    </header>
+    <main id="main" tabindex="-1">
+      <section id="home" class="view">
+        <div class="hero">
+          <img id="hero-back" src="./assets/photo-4.webp" alt="" aria-hidden="true" width="1600" height="900">
+          <img id="hero-image" src="./assets/photo-4.webp" alt="夜色中的海湾与灯火通明的桥梁" fetchpriority="high" width="1600" height="900">
+          <div class="hero-shade"></div>
+          <div class="hero-bottom">
+            <div class="hero-caption"><span class="mono muted">FEATURED / <span id="hero-index">001</span></span><h2 id="hero-name">海湾的夜色</h2><span class="image-label">摄影作品 · 设计示例</span></div>
+            <div class="selector-dock">
+              <div class="slide-controls" role="group" aria-label="悬停、键盘聚焦或轻触切换精选画面"><button data-slide="0" aria-pressed="true" aria-label="查看海湾的夜色"><i class="selector-mark" aria-hidden="true"></i></button><button data-slide="1" aria-pressed="false" aria-label="查看雪线之上"><i class="selector-mark" aria-hidden="true"></i></button><button data-slide="2" aria-pressed="false" aria-label="查看星野记录"><i class="selector-mark" aria-hidden="true"></i></button><button data-slide="3" aria-pressed="false" aria-label="查看冬日河岸"><i class="selector-mark" aria-hidden="true"></i></button><button data-slide="4" aria-pressed="false" aria-label="查看山野的长夜"><i class="selector-mark" aria-hidden="true"></i></button></div>
+              <div class="frame-count mono" aria-label="当前第 1 张，共 5 张"><span id="slide-number">01</span><span class="frame-total" aria-hidden="true">/ 05</span></div>
+            </div>
+            <a href="#selected" class="scroll-link mono" aria-label="SCROLL TO EXPLORE，浏览精选影像">SCROLL TO EXPLORE <span aria-hidden="true">↓</span></a>
+          </div>
+        </div>
+        <section id="selected" class="section selected">
+          <div class="collection-intro">
+            <span class="design-note note-collection" aria-hidden="true">① 章节区 · 断环与短刻度移到图片下方</span>
+            <div><span class="eyebrow dark-eyebrow"><span class="accent-square" aria-hidden="true"></span> PERSONAL VISUAL ARCHIVE</span><h1>世界的切片，<br>时间的存档。</h1><p>沿着光的方向，收集那些值得记住的瞬间。</p></div>
+            <div class="collection-marker" aria-hidden="true"><div class="hud-orbit"></div><span class="mono">SELECTED</span><strong>01</strong></div>
+          </div>
+          <div class="section-heading"><div><span class="eyebrow dark-eyebrow">01 / SELECTED WORKS</span><h2>精选影像<span>每一帧，都有来处。</span></h2></div><a href="#timeline" class="text-action">浏览时间线 <span>↗</span></a></div>
+          <div class="gallery" id="home-gallery"></div>
+          <div class="journey"><div><span class="eyebrow">02 / ON THE ROAD</span><h2>让足迹，串起回忆。</h2></div><p>从一张照片出发，<br>重新走进那一段旅途。</p><a href="#map" class="primary">探索旅途地图 <span>↗</span></a></div>
+        </section>
+      </section>
+      <section id="timeline" class="view section archive" hidden>
+        <div class="section-heading"><div><span class="eyebrow">02 / CHRONOLOGICAL ARCHIVE</span><h1>时间里的影像<span class="cyan">／</span></h1><p class="muted">把瞬间留住，让记忆有迹可循。</p></div><span class="mono muted">DEMO COLLECTION / 05 FRAMES</span></div>
+        <div class="archive-layout"><aside class="date-rail" aria-label="时间线分组"><a href="#group-night">01 <span>夜色与星光</span></a><a href="#group-winter">02 <span>冬日的光</span></a><span class="mono muted">分组为布局示例<br>正式版按真实拍摄日期展示</span></aside><div><section id="group-night"><div class="group-title"><h2>夜色与星光</h2><span class="mono">03 FRAMES</span></div><div class="archive-grid" id="night-gallery"></div></section><section id="group-winter"><div class="group-title"><h2>冬日的光</h2><span class="mono">02 FRAMES</span></div><div class="archive-grid" id="winter-gallery"></div></section></div></div>
+      </section>
+      <section id="map" class="view map-view" hidden>
+        <div class="map-layout">
+          <aside class="map-panel"><span class="eyebrow">03 / EXPLORATION ATLAS</span><h1>影像地图</h1><p class="muted">沿着足迹，发现留下的片段。</p><div class="map-note">地图界面布局示意<br>轮廓与点位不代表真实地理数据</div><div id="map-list"></div></aside>
+          <div class="map-canvas" aria-label="地图交互布局示意，非真实地图">
+            <span class="design-note note-map" aria-hidden="true">④ HUD 语义 · 点位、轨迹、选中范围</span>
+            <svg viewBox="0 0 850 650" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><pattern id="map-grid" width="60" height="60" patternUnits="userSpaceOnUse"><path d="M60 0H0V60" fill="none" stroke="#ffffff" stroke-opacity=".06"/></pattern></defs><rect width="850" height="650" fill="#141c20"/><path d="M0 0H510L540 70 478 118 530 179 444 215 453 282 394 349 411 410 346 470 362 550 282 650H0Z" fill="#283033"/><path d="M0 0H492L515 70 455 120 503 174 421 210 430 277 370 345 386 410 323 468 336 544 259 650" fill="none" stroke="#809398" stroke-width="1.5"/><path d="M98 0L170 136 155 228 230 330 194 450 230 650M0 145L355 250 340 370 465 650M0 410L302 303 440 100" fill="none" stroke="#ffffff" stroke-opacity=".12" stroke-width="2"/><path d="M357 161L403 294 297 478" fill="none" stroke="#64c7e1" stroke-opacity=".5" stroke-dasharray="5 8"/><rect width="850" height="650" fill="url(#map-grid)"/></svg>
+            <span class="map-caption mono">ARCHIVE VIEW / LAYOUT STUDY</span>
+            <button class="map-pin pin-a" data-map="0" aria-label="查看夜色分组" aria-pressed="true"><span>01</span></button><button class="map-pin pin-b" data-map="1" aria-label="查看雪线分组" aria-pressed="false"><span>02</span></button><button class="map-pin pin-c" data-map="2" aria-label="查看星野分组" aria-pressed="false"><span>03</span></button>
+            <div class="map-preview"><img id="map-photo" src="./assets/photo-4.webp" alt="海湾夜景"><div><span class="eyebrow">SELECTED LOCATION</span><h2 id="map-title">海湾的夜色</h2><button id="map-detail" class="text-action">查看作品 <span>↗</span></button></div></div>
+          </div>
+        </div>
+      </section>
+      <section id="search" class="view section search-view" hidden>
+        <span class="eyebrow">04 / VISUAL SEARCH</span><h1>寻找脑海中的画面<span class="cyan">。</span></h1><form id="search-form"><label class="sr-only" for="search-input">描述想寻找的画面</label><input id="search-input" placeholder="试试「夜色」「雪山」「星空」" autocomplete="off"><button class="primary" type="submit">搜索 <span>↗</span></button></form><p class="muted search-help">本预览按演示标题筛选；正式版沿用现有的自然语言视觉搜索。</p><p id="search-status" role="status" class="mono">全部示例 / 05</p><div id="search-gallery" class="search-grid"></div>
+      </section>
+    </main>
+    <footer><span class="footer-brand">ALBIREO<span>／</span></span><span>记录世界，也记录自己。</span><span class="mono">VISUAL ARCHIVE © 2026</span></footer>
+  </div>
+  <dialog id="detail" aria-labelledby="detail-title"><div class="detail-top"><span class="mono">ALBIREO / IMAGE ARCHIVE</span><button id="close-detail" aria-label="关闭作品详情">关闭 <span>×</span></button></div><div class="detail-layout"><div class="detail-stage"><img id="detail-image" src="./assets/photo-4.webp" alt=""><button id="expand-image" aria-pressed="false">放大画面 ＋</button></div><aside class="detail-panel"><span class="eyebrow">PHOTOGRAPH / <span id="detail-index">001</span></span><h2 id="detail-title">海湾的夜色</h2><p id="detail-description">城市的灯光，在水面上延续。</p><div class="metadata"><span>作品类型</span><strong>摄影</strong><span>拍摄时间</span><strong>—</strong><span>拍摄地点</span><strong>—</strong></div><span class="muted demo-note">标题与说明为设计演示；正式页面仅展示实际存在的作品信息。</span><div class="detail-navigation"><button id="previous-image" aria-label="上一张作品">← 上一张</button><button id="next-image" aria-label="下一张作品">下一张 →</button></div><div class="detail-footnote mono">LIGHT. PLACE. MEMORY.</div></aside></div></dialog>
+  <script src="./prototype.js"></script>
+</body>
+</html>

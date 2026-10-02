@@ -1,5 +1,9 @@
 <template>
-  <router-link class="trip-card" :to="tripRoute" :aria-label="`查看${title}的地图`">
+  <router-link
+    class="trip-card"
+    :to="tripRoute"
+    :aria-label="`查看${title}的地图`"
+  >
     <div class="trip-cover">
       <img
         v-if="trip.coverUrl && !errored"
@@ -8,7 +12,7 @@
         loading="lazy"
         @error="errored = true"
       />
-      <div v-else class="cover-placeholder">📍</div>
+      <div v-else class="cover-placeholder">⌖</div>
 
       <div class="cover-overlay">
         <div class="trip-title-block">
@@ -16,8 +20,11 @@
           <div class="trip-date-range">{{ dateRange }}</div>
         </div>
         <div class="trip-meta">
-          <span class="meta-item">📷 {{ trip.itemCount }}</span>
-          <span class="meta-item place-meta" :title="trip.placeName ? coords : undefined">
+          <span class="meta-item">▧ {{ trip.itemCount }}</span>
+          <span
+            class="meta-item place-meta"
+            :title="trip.placeName ? coords : undefined"
+          >
             📍 {{ trip.placeName || coords }}
           </span>
         </div>
@@ -85,121 +92,82 @@ const tripRoute = computed(() => {
 <style scoped>
 .trip-card {
   display: block;
-  color: inherit;
-  text-decoration: none;
-  width: 320px;
+  width: 340px;
   flex-shrink: 0;
-  cursor: pointer;
-  border-radius: 12px;
-  overflow: hidden;
-  background-color: #1a1a1a;
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  color: var(--text);
   position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line);
 }
-
-.trip-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.55);
-}
-
 .trip-cover {
   position: relative;
-  width: 100%;
-  aspect-ratio: 16 / 10;
+  aspect-ratio: 16/10;
+  background: var(--surface);
   overflow: hidden;
-  background-color: #0a0a0a;
 }
-
 .trip-cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block;
-  transition: transform 0.5s ease;
+  transition: transform 0.22s;
 }
-
-.trip-card:hover .trip-cover img {
-  transform: scale(1.06);
+.trip-card:is(:hover, :focus-visible) img {
+  transform: scale(1.025);
 }
-
 .cover-placeholder {
-  width: 100%;
   height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 48px;
-  color: rgba(255, 255, 255, 0.25);
-  background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+  display: grid;
+  place-items: center;
+  color: var(--muted);
 }
-
 .cover-overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0) 0%,
-    rgba(0, 0, 0, 0) 35%,
-    rgba(0, 0, 0, 0.7) 80%,
-    rgba(0, 0, 0, 0.85) 100%
-  );
-  padding: 16px 18px;
+  background: linear-gradient(transparent 20%, #081014ed);
+  padding: 24px;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
-  color: white;
-  pointer-events: none;
+  justify-content: end;
+  color: #edf0ed;
 }
-
-.trip-title-block {
-  margin-bottom: 8px;
-}
-
 .trip-month {
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  font-size: 22px;
+  letter-spacing: 1px;
 }
-
 .trip-date-range {
-  margin-top: 4px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.75);
-  letter-spacing: 0.5px;
+  font: 11px var(--mono);
+  margin-top: 8px;
+  color: #bdcbd2;
 }
-
 .trip-meta {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid #ffffff40;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.85);
 }
-
-.meta-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 3px 9px;
-  border-radius: 11px;
-  background-color: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(6px);
-}
-
-/* 地名可能较长，限制宽度防止把卡片撑变形 */
 .place-meta {
-  max-width: 200px;
+  max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  text-overflow: ellipsis;
 }
-
-@media (max-width: 768px) {
+.trip-card:after {
+  content: '↗';
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  color: #edf0ed;
+  font-size: 20px;
+}
+@media (max-width: 700px) {
   .trip-card {
-    width: 260px;
+    width: 280px;
   }
   .trip-month {
-    font-size: 17px;
+    font-size: 20px;
   }
 }
 </style>
