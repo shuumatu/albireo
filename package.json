@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:photo-viewer": "playwright test"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.850.0",
@@ -21,6 +22,7 @@
     "maplibre-gl": "^5.19.0",
     "motion-v": "^1.7.4",
     "naive-ui": "^2.42.0",
+    "photoswipe": "5.4.4",
     "plyr-vue": "^2.6.8",
     "video.js": "^8.23.4",
     "vue": "^3.5.17",
@@ -28,6 +30,7 @@
     "vue-waterfall-plugin-next": "^2.6.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@vitejs/plugin-vue": "^6.0.0",
     "@vue/tsconfig": "^0.7.0",
     "sharp": "^0.34.5",

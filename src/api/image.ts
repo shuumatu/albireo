@@ -1,6 +1,10 @@
 import request from '../utils/request'
 
 export interface ImageInfoVO {
+  width?: number | null
+  height?: number | null
+  fileSize?: number | null
+  mimeType?: string | null
   objectKey: string
   fileName: string
   imageUrl: string

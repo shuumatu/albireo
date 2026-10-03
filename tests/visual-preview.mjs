@@ -40,7 +40,7 @@ const server = await createServer({
   define: {
     'import.meta.env.VITE_API_BASE_URL': JSON.stringify('/__fixtures')
   },
-  server: { host: '127.0.0.1', port: 5180, strictPort: true },
+  server: { host: '127.0.0.1', port: Number(process.env.VISUAL_PREVIEW_PORT || 5180), strictPort: true },
   plugins: [
     {
       name: 'isolated-visual-fixtures',
@@ -216,3 +216,4 @@ const server = await createServer({
 })
 await server.listen()
 server.printUrls()
+export default server

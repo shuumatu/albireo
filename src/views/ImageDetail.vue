@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
 import { getImageInfo, type ImageInfoVO } from '../api/image'
 import CommentSection from '../components/CommentSection.vue'
 import SimilarStrip from '../components/SimilarStrip.vue'
+import PhotoViewer from '../components/PhotoViewer.vue'
+import { formatImageSize } from '../utils/photoViewer'
 const route = useRoute(),
   router = useRouter(),
   uuid = String(route.params.uuid)
@@ -12,13 +14,25 @@ const image = ref<ImageInfoVO | null>(null),
   loading = ref(true),
   error = ref(false),
   imageError = ref(false),
-  loaded = ref(false),
-  zoom = ref(false)
-const lightbox = ref<HTMLDialogElement>(),
-  stageButton = ref<HTMLButtonElement>()
-const src = computed(
-  () => image.value?.displayUrl || image.value?.imageUrl || ''
-)
+  loaded = ref(false)
+const viewer = ref<InstanceType<typeof PhotoViewer>>()
+const stageButton = ref<HTMLButtonElement>()
+const stageImage = ref<HTMLImageElement>()
+const viewerError = ref(false)
+const sourceIndex = ref(0)
+const imageAttempt = ref(0)
+let loadId = 0
+const sources = computed(() => [
+  ...new Set(
+    [
+      image.value?.displayUrl,
+      image.value?.mediumUrl,
+      image.value?.imageUrl
+    ].filter((url): url is string => Boolean(url))
+  )
+])
+const src = computed(() => sources.value[sourceIndex.value] || '')
+const fileSize = computed(() => formatImageSize(image.value?.fileSize))
 const title = computed(() => image.value?.title || '未命名作品')
 const date = (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm')
 const status = computed(
@@ -35,33 +49,43 @@ function back() {
   else router.push('/timeline')
 }
 async function load() {
+  const id = ++loadId
   loading.value = true
   error.value = false
   imageError.value = false
   loaded.value = false
+  viewerError.value = false
+  sourceIndex.value = 0
+  imageAttempt.value++
   try {
-    image.value = await getImageInfo(uuid)
-    if (!image.value) error.value = true
+    const result = await getImageInfo(uuid)
+    if (id !== loadId) return
+    image.value = result
+    if (!result) error.value = true
   } catch {
-    error.value = true
+    if (id === loadId) error.value = true
   } finally {
-    loading.value = false
+    if (id === loadId) loading.value = false
   }
 }
-async function open() {
-  if (!loaded.value || imageError.value) return
-  zoom.value = false
-  await nextTick()
-  lightbox.value?.showModal()
-  document.body.style.overflow = 'hidden'
+function imageFailed() {
+  if (sourceIndex.value + 1 < sources.value.length) sourceIndex.value++
+  else imageError.value = true
 }
-function closed() {
-  document.body.style.overflow = ''
-  stageButton.value?.focus()
+function open() {
+  if (
+    !loaded.value ||
+    imageError.value ||
+    !stageButton.value ||
+    !stageImage.value
+  )
+    return
+  viewerError.value = false
+  void viewer.value?.open(stageButton.value, stageImage.value)
 }
 onMounted(load)
 onBeforeUnmount(() => {
-  document.body.style.overflow = ''
+  loadId++
 })
 </script>
 <template>
@@ -81,32 +105,53 @@ onBeforeUnmount(() => {
     </div>
     <template v-else-if="image">
       <div class="detail-grid">
-        <div class="image-stage">
-          <button
-            ref="stageButton"
-            class="image-open"
-            :disabled="!loaded || imageError"
-            aria-label="全屏查看图片"
-            @click="open"
+        <figure class="photo-presentation">
+          <div
+            class="image-stage"
+            :class="{ 'is-loaded': loaded && !imageError }"
+            :aria-busy="!loaded && !imageError"
           >
-            <img
-              :key="src"
-              :src="src"
-              :alt="title"
-              @load="loaded = true"
-              @error="imageError = true"
-            /><span v-if="loaded && !imageError" class="expand-hint"
-              >查看原图 ↗</span
+            <button
+              ref="stageButton"
+              class="image-open"
+              type="button"
+              :disabled="!loaded || imageError || viewer?.opening"
+              :aria-label="`详细浏览照片：${title}`"
+              aria-haspopup="dialog"
+              aria-describedby="photo-open-hint"
+              @click="open"
             >
-          </button>
-          <div v-if="imageError" class="image-state" role="alert">
-            <p>图片暂时无法加载</p>
-            <button class="archive-action" @click="load">重新加载</button>
+              <img
+                ref="stageImage"
+                :key="`${imageAttempt}-${src}`"
+                :src="src"
+                :alt="title"
+                decoding="async"
+                fetchpriority="high"
+                draggable="false"
+                @load="loaded = true"
+                @error="imageFailed"
+              />
+            </button>
+            <div v-if="imageError" class="image-state" role="alert">
+              <p>图片暂时无法加载</p>
+              <button class="archive-action" @click="load">重新加载</button>
+            </div>
+            <div v-else-if="!loaded" class="image-state" role="status">
+              <span class="image-loading-mark" aria-hidden="true"></span
+              >正在载入画面…
+            </div>
           </div>
-          <div v-else-if="!loaded" class="image-state" role="status">
-            正在载入画面…
-          </div>
-        </div>
+          <figcaption class="photo-caption">
+            <span id="photo-open-hint">点击照片，进入沉浸浏览</span
+            ><span v-if="image.width && image.height" class="photo-resolution"
+              >{{ image.width }} × {{ image.height }}</span
+            >
+          </figcaption>
+          <p v-if="viewerError" class="photo-viewer-error" role="alert">
+            浏览器暂时无法打开，请点击照片重试。
+          </p>
+        </figure>
         <aside class="detail-meta hud-panel">
           <span class="archive-eyebrow">IMAGE ARCHIVE</span>
           <h1>{{ title }}</h1>
@@ -129,6 +174,10 @@ onBeforeUnmount(() => {
             <dl>
               <dt>文件名</dt>
               <dd>{{ image.fileName }}</dd>
+              <template v-if="fileSize"
+                ><dt>文件大小</dt>
+                <dd>{{ fileSize }}</dd></template
+              >
               <dt>处理状态</dt>
               <dd>{{ status }}</dd>
             </dl>
@@ -140,38 +189,13 @@ onBeforeUnmount(() => {
       <div class="comments hud-panel">
         <CommentSection target-type="image" :target-id="uuid" />
       </div>
+      <PhotoViewer
+        ref="viewer"
+        :image="image"
+        :title="title"
+        @error="viewerError = true"
+      />
     </template>
-    <Teleport to="body"
-      ><dialog
-        ref="lightbox"
-        class="image-lightbox"
-        aria-label="图片全屏预览"
-        @close="closed"
-        @click="$event.target === lightbox && lightbox?.close()"
-      >
-        <div class="lightbox-toolbar">
-          <span>{{ title }}</span>
-          <div>
-            <button
-              class="archive-action"
-              :aria-pressed="zoom"
-              @click="zoom = !zoom"
-            >
-              {{ zoom ? '适应屏幕' : '放大画面' }}</button
-            ><button
-              class="archive-action"
-              autofocus
-              @click="lightbox?.close()"
-              aria-label="关闭图片预览"
-            >
-              关闭 ×
-            </button>
-          </div>
-        </div>
-        <div class="lightbox-stage" :class="{ zoomed: zoom }">
-          <img :src="src" :alt="title" />
-        </div></dialog
-    ></Teleport>
   </article>
 </template>
 <style scoped>
@@ -204,6 +228,35 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: 1;
+  overflow: hidden;
+}
+.photo-presentation {
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--bg) 60%, black);
+}
+.photo-caption {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 28px;
+  color: var(--muted);
+  font-size: 11px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+.photo-resolution {
+  font: 10px var(--mono);
+  letter-spacing: 0.5px;
+}
+.photo-viewer-error {
+  font-size: 12px;
+  color: var(--star-gold);
+  padding: 0 28px;
 }
 .image-open {
   border: 0;
@@ -213,6 +266,8 @@ onBeforeUnmount(() => {
   background: transparent;
   position: relative;
   color: var(--text);
+  cursor: zoom-in;
+  outline-offset: -4px;
 }
 .image-open img {
   display: block;
@@ -220,20 +275,29 @@ onBeforeUnmount(() => {
   height: 100%;
   max-height: 72dvh;
   object-fit: contain;
+  opacity: 0;
+  transform: scale(0.99);
+  transition:
+    opacity 450ms ease,
+    transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.expand-hint {
-  position: absolute;
-  bottom: 20px;
-  right: 20px;
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
-  padding: 10px 16px;
-  border: 1px solid var(--line);
-  font-size: 12px;
-  opacity: 0.7;
-}
-.image-open:is(:hover, :focus-visible) .expand-hint {
+.is-loaded .image-open img {
   opacity: 1;
-  color: var(--accent);
+  transform: scale(1);
+}
+.image-loading-mark {
+  width: 30px;
+  height: 30px;
+  margin-bottom: 20px;
+  border: 1px solid var(--line);
+  border-top-color: var(--star-blue);
+  border-radius: 50%;
+  animation: photo-loading 1s linear infinite;
+}
+@keyframes photo-loading {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .image-state {
   position: absolute;
@@ -312,58 +376,6 @@ summary {
   padding: 30px;
   margin-top: 24px;
 }
-.image-lightbox {
-  width: 96vw;
-  max-width: none;
-  height: 94dvh;
-  max-height: 94dvh;
-  margin: auto;
-  padding: 0;
-  background: color-mix(in srgb, var(--bg) 60%, black);
-  color: var(--text);
-  border: 1px solid var(--line);
-}
-.image-lightbox::backdrop {
-  background: color-mix(in srgb, var(--bg) 94%, transparent);
-}
-.lightbox-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--line);
-  gap: 12px;
-}
-.lightbox-toolbar > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.lightbox-toolbar > div {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.lightbox-stage {
-  height: calc(100% - 69px);
-  overflow: auto;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-}
-.lightbox-stage img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-}
-.lightbox-stage.zoomed {
-  display: block;
-}
-.lightbox-stage.zoomed img {
-  width: 150%;
-  max-width: none;
-  max-height: none;
-}
 @media (max-width: 850px) {
   .detail-grid {
     grid-template-columns: 1fr;
@@ -399,16 +411,18 @@ summary {
   .detail-meta h1 {
     font-size: 24px;
   }
-  .lightbox-toolbar {
-    padding: 8px;
-    flex-wrap: wrap;
+  .photo-caption {
+    padding: 12px 16px;
+    font-size: 10px;
   }
-  .lightbox-toolbar > span {
-    font-size: 12px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .image-open img {
+    transition: none;
+    transform: none;
   }
-  .lightbox-toolbar .archive-action {
-    padding: 8px 12px;
-    font-size: 12px;
+  .image-loading-mark {
+    animation: none;
   }
 }
 </style>
