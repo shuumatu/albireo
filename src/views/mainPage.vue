@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import FeaturedHero from '../components/FeaturedHero.vue'
+import { heroSlides } from '../utils/heroSources'
 import RecommendSection from '../components/RecommendSection.vue'
 import MediaCard from '../components/MediaCard.vue'
 import TripCard from '../components/TripCard.vue'
@@ -70,7 +71,7 @@ onMounted(() => {
 </script>
 <template>
   <div class="home-page">
-    <FeaturedHero />
+    <FeaturedHero :slides="heroSlides" />
     <section id="selected" class="selected-area" tabindex="-1">
       <div class="collection-intro">
         <div>

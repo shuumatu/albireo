@@ -22,6 +22,9 @@ interface BucketPhoto {
   createdAt: string;      // ISO 8601 格式
   mediaType: string;
   coverUrl: string | null;  // 后端可能返回 null
+  thumbnailUrl?: string | null;
+  width?: number | null;
+  height?: number | null;
 }
 
 interface TimelineBucket {

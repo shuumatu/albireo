@@ -11,6 +11,7 @@ import {
 } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { layoutTimeline } from '../utils/timelineLayout'
+import TimelineMedia from '../components/TimelineMedia.vue'
 defineOptions({ name: 'TimeLine' })
 import {
   getTimelineStatistics,
@@ -25,6 +26,7 @@ interface Photo {
   url: string
   date: Date
   coverUrl?: string
+  thumbnailUrl?: string
   mediaType?: string
   naturalWidth?: number
   naturalHeight?: number
@@ -132,8 +134,7 @@ const photoRatio = (photo: Photo): number => {
 }
 
 // 处理图片加载完成
-const handleImageLoad = (event: Event, photo: Photo) => {
-  const img = event.target as HTMLImageElement
+const handleImageLoad = (img: HTMLImageElement, photo: Photo) => {
   if (img.naturalWidth && img.naturalHeight) {
     const size = imageDimensions.value.get(photo.url)
     if (size?.width === img.naturalWidth && size.height === img.naturalHeight)
@@ -265,6 +266,9 @@ const timeGroups = computed((): TimeGroup[] => {
                 url: displayUrl,
                 date: new Date(p.createdAt),
                 coverUrl: p.coverUrl === null ? undefined : p.coverUrl, // 将 null 转换为 undefined
+                thumbnailUrl: p.thumbnailUrl || undefined,
+                naturalWidth: p.width ?? undefined,
+                naturalHeight: p.height ?? undefined,
                 mediaType: p.mediaType
               }
             }),
@@ -907,7 +911,7 @@ watch(windowHeight, () => {
               </div>
               <!-- 图片网格或占位符 -->
               <div v-if="group.isLoaded" class="photo-grid">
-                <router-link
+                <TimelineMedia
                   v-for="{
                     photo,
                     width: photoWidth,
@@ -921,38 +925,17 @@ watch(windowHeight, () => {
                       photo.mediaType?.startsWith('video/')
                   }"
                   :to="mediaDetailRoute(photo)"
-                  :aria-label="`查看${photo.mediaType === 'video' || photo.mediaType?.startsWith('video/') ? '视频' : '图片'}详情`"
+                  :src="photo.url"
+                  :preview-src="photo.thumbnailUrl"
+                  :is-video="photo.mediaType === 'video' || !!photo.mediaType?.startsWith('video/')"
+                  :width="photo.naturalWidth"
+                  :height="photo.naturalHeight"
+                  @load="(img) => handleImageLoad(img, photo)"
                   :style="{
                     width: photoWidth + 'px',
                     height: photoHeight + 'px'
                   }"
-                >
-                  <img
-                    :src="photo.url"
-                    :alt="`照片 ${photo.id}`"
-                    loading="lazy"
-                    @load="(e) => handleImageLoad(e, photo)"
-                  />
-                  <!-- 视频标识图标 -->
-                  <div
-                    v-if="
-                      photo.mediaType === 'video' ||
-                      photo.mediaType?.startsWith('video/')
-                    "
-                    class="video-indicator"
-                  >
-                    <svg
-                      width="24"
-                      height="24"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <circle cx="12" cy="12" r="10" fill="rgba(0,0,0,0.6)" />
-                      <path d="M10 8L16 12L10 16V8Z" fill="var(--star-blue)" />
-                    </svg>
-                  </div>
-                </router-link>
+                />
               </div>
 
               <!-- 占位符（基于预估数量） -->
@@ -1198,26 +1181,16 @@ watch(windowHeight, () => {
 
 .skeleton-item {
   flex: 0 0 auto;
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.05) 25%,
-    rgba(255, 255, 255, 0.1) 50%,
-    rgba(255, 255, 255, 0.05) 75%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
+  background: var(--surface);
+  animation: timeline-breathe 2.4s ease-in-out infinite;
   border-radius: 0;
   width: 200px;
   height: 200px;
 }
 
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
+@keyframes timeline-breathe {
+  0%, 100% { opacity: 0.65; }
+  50% { opacity: 1; }
 }
 
 .photo-item {
@@ -1234,25 +1207,6 @@ watch(windowHeight, () => {
 
 .photo-item:hover {
   opacity: 0.85;
-}
-
-.photo-item img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-}
-
-.video-indicator {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  pointer-events: none;
-  opacity: 0.9;
-}
-
-.photo-item:hover .video-indicator {
-  opacity: 1;
 }
 
 .scrubber {
@@ -1468,7 +1422,7 @@ watch(windowHeight, () => {
 .photo-item {
   transition: filter 0.2s;
 }
-.photo-item:is(:hover, :focus-visible) {
+.photo-item:is(:hover, :focus-within) {
   opacity: 1;
   filter: brightness(1.1);
   outline: 1px solid var(--accent);
@@ -1522,5 +1476,8 @@ watch(windowHeight, () => {
 .loading-overlay,
 .error-overlay {
   background: var(--bg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-item { animation: none; }
 }
 </style>

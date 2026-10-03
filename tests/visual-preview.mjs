@@ -103,6 +103,8 @@ const server = await createServer({
                 uuid: `${year}-${month}-${x.uuid}`,
                 objectKey: x.uuid,
                 coverUrl: timelineCover(i),
+                width: timelineDimensions[i][0],
+                height: timelineDimensions[i][1],
                 mediaType: x.itemType,
                 createdAt: `${year}-${String(month).padStart(2, '0')}-${String([23,16,16,13,10,9,9,9,9,9,9,4][i]).padStart(2, '0')}T12:00:00`
               }))

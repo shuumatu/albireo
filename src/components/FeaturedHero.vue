@@ -1,244 +1,36 @@
 <script setup lang="ts">
-import { ref, nextTick, onMounted, onBeforeUnmount, onDeactivated } from 'vue'
-import {
-  edgeVelocity,
-  createPanMotion,
-  horizontalOverflow
-} from '../utils/panorama'
-import bay from '../assets/bg4.JPG?url'
-import mountain from '../assets/bg2.JPG?url'
-import stars from '../assets/bg5.jpg?url'
-import river from '../assets/bg1.JPG?url'
-import night from '../assets/bg3.JPG?url'
-interface Slide {
-  src: string
-  title: string
-  type: string
-}
-const titles = ['海湾的夜色', '雪线之上', '星野记录', '冬日河岸', '山野的长夜']
-// These panoramas need their original height: width-limited thumbnails blur under cover.
-const sources = [bay, mountain, stars, river, night]
-const slides: Slide[] = titles.map((title, i) => ({
-  title,
-  type: '摄影作品',
-  src: sources[i]!
-}))
-const active = ref(0),
-  current = ref<Slide>(slides[0]!),
-  previous = ref<Slide | null>(null)
-const front = ref<HTMLImageElement>(),
-  failure = ref(false)
-const hero = ref<HTMLElement>()
-const pan = ref(50)
-const panDirection = ref(0)
-const reduced = window.matchMedia('(prefers-reduced-motion: reduce)')
-const cache = new Map<string, Promise<void>>()
-let request = 0,
-  failedIndex = 0
-let velocity = 0,
-  overflow = 0
-let pointer: { x: number; y: number } | null = null
-const motion = createPanMotion(
-  () => ({ position: pan.value, velocity, overflow }),
-  (position) => {
-    pan.value = position
-  },
-  (callback) => requestAnimationFrame(callback),
-  (id) => cancelAnimationFrame(id)
-)
-function stopPan() {
-  motion.stop()
-  velocity = 0
-  panDirection.value = 0
-  pointer = null
-}
-function updatePan() {
-  if (!pointer || !hero.value || !front.value) return
-  const rect = hero.value.getBoundingClientRect()
-  if (
-    pointer.x < rect.left ||
-    pointer.x > rect.right ||
-    pointer.y < rect.top ||
-    pointer.y > rect.bottom
-  ) {
-    stopPan()
-    return
-  }
-  const ratio = (pointer.x - rect.left) / rect.width
-  overflow = horizontalOverflow(
-    front.value.naturalWidth,
-    front.value.naturalHeight,
-    rect.width,
-    rect.height
-  )
-  velocity = edgeVelocity(ratio)
-  panDirection.value = overflow ? Math.sign(velocity) : 0
-  if (!velocity || !overflow) {
-    motion.stop()
-    return
-  }
-  if (reduced.matches) {
-    motion.stop()
-    pan.value = Math.max(0, Math.min(100, ratio * 100))
-    return
-  }
-  motion.start()
-}
-function movePan(event: PointerEvent) {
-  if (event.pointerType !== 'mouse' && event.pointerType !== 'pen') return
-  if ((event.target as Element).closest('button, a, .hero-error')) {
-    stopPan()
-    return
-  }
-  pointer = { x: event.clientX, y: event.clientY }
-  updatePan()
-}
-function keyPan(event: KeyboardEvent) {
-  if (event.target !== event.currentTarget) return
-  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
-  event.preventDefault()
-  stopPan()
-  pan.value = Math.max(
-    0,
-    Math.min(100, pan.value + (event.key === 'ArrowLeft' ? -5 : 5))
-  )
-}
-function visibilityChanged() {
-  if (document.hidden) stopPan()
-}
-function ready(slide: Slide) {
-  const src = slide.src
-  if (!cache.has(src)) {
-    const image = new Image()
-    image.src = src
-    cache.set(
-      src,
-      image.decode().catch((e) => {
-        cache.delete(src)
-        throw e
-      })
-    )
-  }
-  return cache.get(src)!
-}
-async function select(index: number, force = false) {
-  stopPan()
-  const id = ++request,
-    slide = slides[index]
-  if (!slide) return
-  if (current.value.src === slide.src && !force && !failure.value) {
-    active.value = index
-    current.value = slide
-    failure.value = false
-    return
-  }
-  try {
-    await ready(slide)
-  } catch {
-    if (id === request) {
-      failedIndex = index
-      failure.value = true
-    }
-    return
-  }
-  if (id !== request) return
-  motion.stop()
-  front.value?.getAnimations().forEach((a) => a.cancel())
-  previous.value = current.value
-  current.value = { ...slide }
-  active.value = index
-  failure.value = false
-  await nextTick()
-  updatePan()
-  if (!reduced.matches)
-    front.value?.animate([{ opacity: 0 }, { opacity: 1 }], {
-      duration: 280,
-      easing: 'ease-out'
-    })
-}
-function enter(event: PointerEvent, index: number) {
-  if (event.pointerType === 'mouse') void select(index)
-}
+import BackgroundSlideshow from './BackgroundSlideshow.vue'
+import type { BackgroundSlide, BackgroundPlaybackOptions } from '../types/background'
+
+const props = withDefaults(defineProps<{
+  slides: readonly BackgroundSlide[]
+  playback?: BackgroundPlaybackOptions
+  exploreTarget?: string
+}>(), { exploreTarget: 'selected' })
+const emit = defineEmits<{
+  change: [slide: BackgroundSlide | null]
+  error: [slide: BackgroundSlide]
+}>()
 function explore(event: MouseEvent) {
   event.preventDefault()
-  document
-    .getElementById('selected')
-    ?.scrollIntoView({ behavior: reduced.matches ? 'auto' : 'smooth' })
-  document.getElementById('selected')?.focus({ preventScroll: true })
+  const target = document.getElementById(props.exploreTarget)
+  target?.scrollIntoView({
+    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+  })
+  target?.focus({ preventScroll: true })
 }
-function imageError() {
-  stopPan()
-  failure.value = true
-  failedIndex = active.value
-}
-onMounted(() => {
-  window.addEventListener('blur', stopPan)
-  window.addEventListener('resize', stopPan)
-  document.addEventListener('visibilitychange', visibilityChanged)
-})
-onDeactivated(stopPan)
-onBeforeUnmount(() => {
-  request++
-  stopPan()
-  window.removeEventListener('blur', stopPan)
-  window.removeEventListener('resize', stopPan)
-  document.removeEventListener('visibilitychange', visibilityChanged)
-})
 </script>
 <template>
   <section class="featured-hero" aria-label="精选画面">
-    <div
-      ref="hero"
-      class="hero"
-      :style="{ '--hero-pan': `${pan}%` }"
-      tabindex="0"
-      aria-label="全景照片，鼠标移至左右边缘平移，也可使用左右方向键"
-      @pointermove="movePan"
-      @pointerenter="movePan"
-      @pointerleave="stopPan"
-      @pointercancel="stopPan"
-      @keydown="keyPan"
+    <BackgroundSlideshow
+      class="hero" :slides="slides" :playback="playback" label="全景照片"
+      @change="emit('change', $event)" @error="emit('error', $event)"
+      v-slot="{ slides, current, active, select, hover, cancelHover }"
     >
-      <img
-        v-if="previous"
-        id="hero-back"
-        :src="previous.src"
-        alt=""
-        aria-hidden="true"
-        draggable="false"
-      />
-      <img
-        :key="current.src + (failure ? 'failed' : 'ready')"
-        ref="front"
-        :src="current.src"
-        :alt="current.title"
-        fetchpriority="high"
-        draggable="false"
-        @error="imageError"
-        @load="updatePan"
-      />
       <div class="hero-shade" aria-hidden="true"></div>
-      <div
-        class="pan-cue pan-cue-left"
-        :class="{ 'is-visible': panDirection === -1, 'at-limit': pan <= 0 }"
-        aria-hidden="true"
-      >
-        <svg viewBox="0 0 32 32" fill="none">
-          <path d="m20 6-10 10 10 10" />
-        </svg>
-      </div>
-      <div
-        class="pan-cue pan-cue-right"
-        :class="{ 'is-visible': panDirection === 1, 'at-limit': pan >= 100 }"
-        aria-hidden="true"
-      >
-        <svg viewBox="0 0 32 32" fill="none">
-          <path d="m12 6 10 10-10 10" />
-        </svg>
-      </div>
-      <div class="hero-bottom">
+      <div v-if="current" class="hero-bottom">
         <div class="hero-caption">
-          <span class="mono muted"
+          <span v-if="active >= 0" class="mono muted"
             >FEATURED / {{ String(active + 1).padStart(3, '0') }}</span
           >
           <h2>{{ current.title }}</h2>
@@ -252,10 +44,11 @@ onBeforeUnmount(() => {
           >
             <button
               v-for="(slide, index) in slides"
-              :key="`${slide.src}-${index}`"
-              :aria-label="`查看${slide.title}`"
+              :key="slide.id"
+              :aria-label="`查看${slide.title || `背景 ${index + 1}`}`"
               :aria-pressed="active === index"
-              @pointerenter="enter($event, index)"
+              @pointerenter="hover($event, index)"
+              @pointerleave="cancelHover"
               @focus="select(index)"
               @click="select(index)"
             >
@@ -263,10 +56,11 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <div
+            v-if="active >= 0"
             class="frame-count mono"
             :aria-label="`当前第 ${active + 1} 张，共 ${slides.length} 张`"
           >
-            <span id="slide-number">{{
+            <span class="slide-number">{{
               String(active + 1).padStart(2, '0')
             }}</span
             ><span class="frame-total" aria-hidden="true"
@@ -274,76 +68,21 @@ onBeforeUnmount(() => {
             >
           </div>
         </div>
-        <a class="scroll-link mono" href="#selected" @click="explore"
+        <a class="scroll-link mono" :href="`#${exploreTarget}`" @click="explore"
           >SCROLL TO EXPLORE <span aria-hidden="true">↓</span></a
         >
       </div>
-      <div v-if="failure" class="hero-error" role="status">
-        画面暂时无法加载
-        <button @click="select(failedIndex, true)">重试</button>
-      </div>
-    </div>
+    </BackgroundSlideshow>
   </section>
 </template>
 <style scoped>
 .featured-hero {
   container-type: inline-size;
 }
-.hero {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  background: #111a22;
-}
-.hero > img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: var(--hero-pan, 50%) center;
-  user-select: none;
-  z-index: -3;
-}
 .hero-shade {
   position: absolute;
   inset: 0;
   z-index: -2;
-}
-.pan-cue {
-  position: absolute;
-  top: 50%;
-  z-index: 1;
-  display: grid;
-  color: #d9e9ff;
-  opacity: 0;
-  transform: translateY(-50%);
-  transition: opacity 160ms ease;
-  filter: drop-shadow(0 1px 3px #0009);
-  pointer-events: none;
-}
-.pan-cue-left {
-  left: clamp(18px, 3vw, 52px);
-}
-.pan-cue-right {
-  right: clamp(18px, 3vw, 52px);
-}
-.pan-cue.is-visible {
-  opacity: 0.85;
-}
-.pan-cue svg {
-  width: 32px;
-  height: 32px;
-  stroke: currentColor;
-  stroke-width: 1.5;
-}
-.pan-cue.is-visible.at-limit {
-  opacity: 0.3;
-}
-@media (prefers-reduced-motion: reduce) {
-  .pan-cue {
-    transition: none;
-  }
 }
 .hero-bottom {
   position: absolute;
@@ -366,26 +105,8 @@ onBeforeUnmount(() => {
 .scroll-link span {
   font-size: 25px;
 }
-.hero-error {
-  position: absolute;
-  bottom: 0;
-  left: 8%;
-  font-size: 12px;
-  background: #10151fdc;
-  padding: 6px 12px;
-  color: var(--text);
-}
-.hero-error button {
-  background: none;
-  color: var(--accent);
-  border: 0;
-  min-height: 32px;
-}
 .hero {
   height: clamp(480px, calc(100svh - var(--header-height)), 880px);
-}
-.hero #hero-back {
-  z-index: -4;
 }
 .hero-shade {
   background: linear-gradient(
@@ -563,7 +284,7 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   text-shadow: 0 1px 8px #0008;
 }
-.frame-count #slide-number {
+.frame-count .slide-number {
   font-family: Arial, sans-serif;
   font-weight: 700;
   letter-spacing: -2px;
@@ -618,7 +339,7 @@ onBeforeUnmount(() => {
     font-size: 36px;
     gap: 9px;
   }
-  .frame-count #slide-number {
+  .frame-count .slide-number {
     letter-spacing: -1px;
   }
   .frame-count .frame-total {
