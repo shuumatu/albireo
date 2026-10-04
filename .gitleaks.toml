@@ -1,0 +1,39 @@
+title = "Repository credential protection"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "configuration-credential"
+description = "Literal database passwords and service credentials, including low entropy values"
+path = '''(?i)(?:\.(?:ya?ml|properties|env)$|(?:^|/)\.env(?:\.|$))'''
+regex = '''(?im)^[ \t]*[a-z0-9_.-]*(?:password|passwd|pwd|secretaccesskey|secret-access-key|accesskeyid|api[_-]?key|appkey|internal-token|gateway-token)[a-z0-9_.-]*[ \t]*[:=][ \t]*["']?([^\s"'${<`#][^\s"'`#]{3,})'''
+secretGroup = 1
+
+[[rules.allowlists]]
+description = "Explicit non-secret template values and empty YAML values"
+regexTarget = "secret"
+regexes = [ '''(?i)^-?(?:replace[-_].*|change[-_].*|changeme|example[-_].*|dummy[-_].*|<.*>|null|true|false)$''' ]
+
+[[rules]]
+id = "spring-secret-fallback"
+description = "Spring credential placeholders must not contain a hardcoded fallback"
+regex = '''(?i)\$\{[a-z0-9_.-]*(?:password|secret|api[_ .-]?key|appkey|encryption[_.-]?key|internal[_.-]?token|gateway[_.-]?token)[a-z0-9_.-]*:([^${}\s"']{4,})\}'''
+secretGroup = 1
+
+[[rules.allowlists]]
+description = "Explicit template fallback values"
+regexTarget = "secret"
+regexes = [ '''(?i)^-?(?:replace[-_].*|change[-_].*|example[-_].*|dummy[-_].*|<.*>)$''' ]
+
+[[rules]]
+id = "nested-yaml-api-key"
+description = "API keys in nested YAML api/key configuration"
+path = '''(?i)\.ya?ml$'''
+regex = '''(?im)^[ \t]+(?:key|appkey|app-key)[ \t]*:[ \t]*["']?([A-Za-z0-9][A-Za-z0-9_.+/=-]{15,})'''
+secretGroup = 1
+
+[[rules.allowlists]]
+description = "Explicit non-secret API key templates"
+regexTarget = "secret"
+regexes = [ '''(?i)^-?(?:replace[-_].*|change[-_].*|example[-_].*|dummy[-_].*)$''' ]
