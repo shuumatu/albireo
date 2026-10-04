@@ -1,6 +1,8 @@
+import type { MediaRendition } from '../types/media';
 import request from "../utils/request";
 
 export interface MapPointVO {
+  renditions?: MediaRendition[];
   uuid: string;
   mediaType: "video" | "image";
   objectKey: string;
@@ -10,6 +12,7 @@ export interface MapPointVO {
 }
 
 export interface MapClusterVO {
+  renditions?: MediaRendition[];
   clusterId: string;
   longitude: number;
   latitude: number;

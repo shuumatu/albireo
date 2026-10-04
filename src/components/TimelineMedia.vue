@@ -9,10 +9,14 @@ function rememberSource(src: string) {
 </script>
 
 <script setup lang="ts">
+import type { MediaRendition } from '../types/media'
+import MediaImage from './MediaImage.vue'
+
 import { computed, nextTick, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { RouteLocationRaw } from 'vue-router'
 
 const props = defineProps<{
+  renditions?: MediaRendition[]
   src: string
   previewSrc?: string
   to: RouteLocationRaw
@@ -22,7 +26,8 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ load: [image: HTMLImageElement] }>()
 const tile = ref<HTMLElement>()
-const image = ref<HTMLImageElement>()
+const imageComponent = ref<InstanceType<typeof MediaImage>>()
+const image = computed(() => imageComponent.value?.image)
 const started = ref(false)
 const nearViewport = ref(false)
 const ready = ref(false)
@@ -33,7 +38,7 @@ const slow = ref(false)
 const skipReveal = ref(false)
 const attempt = ref(0)
 const preview = computed(() =>
-  props.previewSrc && props.previewSrc !== props.src ? props.previewSrc : ''
+  !props.renditions?.length && props.previewSrc && props.previewSrc !== props.src ? props.previewSrc : ''
 )
 const state = computed(() => !props.src ? 'missing' : failed.value ? 'error' : ready.value ? 'ready' : started.value ? 'loading' : 'idle')
 let observer: IntersectionObserver | undefined
@@ -138,10 +143,10 @@ onUnmounted(() => { generation++; suspend() })
         />
         <span class="media-breath"></span>
       </div>
-      <img
+      <MediaImage :renditions="renditions" fit="contain" loading="eager"
         v-if="started && src"
         :key="`${src}-${attempt}`"
-        ref="image"
+        ref="imageComponent"
         class="media-image"
         :src="src"
         :width="width"
@@ -174,10 +179,10 @@ onUnmounted(() => { generation++; suspend() })
 .has-preview .media-preview { opacity: 0.75; }
 .media-breath { position: absolute; inset: 0; background: var(--surface); opacity: 0.24; }
 .is-near[data-state='loading'] .media-breath { animation: media-breathe 2.4s ease-in-out infinite; }
-.media-image { display: block; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; filter: blur(4px); transition: opacity 320ms ease-out, filter 360ms ease-out; }
-.is-ready .media-image { opacity: 1; filter: blur(0); }
+:deep(.media-image) { display: block; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; filter: blur(4px); transition: opacity 320ms ease-out, filter 360ms ease-out; }
+.is-ready :deep(.media-image) { opacity: 1; filter: blur(0); }
 .is-ready .media-placeholder { opacity: 0; visibility: hidden; }
-.skip-reveal .media-image, .skip-reveal .media-placeholder { transition: none; }
+.skip-reveal :deep(.media-image), .skip-reveal .media-placeholder { transition: none; }
 .media-message { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 12px; text-align: center; padding: 8px; }
 [data-state='error'] .media-message { padding-bottom: 44px; }
 .media-slow { position: absolute; bottom: 8px; left: 8px; padding: 3px 6px; background: var(--bg); color: var(--muted); font-size: 11px; max-width: calc(100% - 44px); }
@@ -186,7 +191,7 @@ onUnmounted(() => { generation++; suspend() })
 @keyframes media-breathe { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.1; } }
 @media (pointer: coarse) { .media-retry { min-height: 44px; min-width: 44px; } }
 @media (prefers-reduced-motion: reduce) {
-  .media-image, .media-placeholder, .media-preview { transition: none; }
+  :deep(.media-image), .media-placeholder, .media-preview { transition: none; }
   .is-near[data-state='loading'] .media-breath { animation: none; }
 }
 </style>

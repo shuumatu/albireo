@@ -1,9 +1,7 @@
 <template>
   <n-card :bordered="false">
     <div class="video-container">
-      <video controls :poster="content.coverUrl" class="share-video">
-        <source :src="videoSrc" />
-      </video>
+      <VideoPlayer :playback="content.playback" :video-sources="videoSources" :poster="content.posterUrl || content.coverUrl" />
     </div>
     <n-space vertical :size="12" style="margin-top: 16px">
       <n-h3 v-if="content.title" style="margin: 0">{{ content.title }}</n-h3>
@@ -25,9 +23,15 @@
 <script setup lang="ts">
 import { NCard, NSpace, NH3, NText, NTag } from 'naive-ui'
 import { computed } from 'vue'
+import VideoPlayer from '../../../components/VideoPlayer.vue'
+import type { VideoPlayback } from '../../../types/media'
+import type { VideoVersion } from '../../../api/video'
 
 const props = defineProps<{
   content: {
+    playback?: VideoPlayback
+    posterUrl?: string
+    videoVersions?: VideoVersion[]
     objectKey: string
     sourceUrl?: string
     title?: string
@@ -39,7 +43,10 @@ const props = defineProps<{
   }
 }>()
 
-const videoSrc = computed(() => props.content.sourceUrl || '')
+const videoSources = computed(() => [
+  ...(props.content.sourceUrl ? [{ src: props.content.sourceUrl, label: '原画', type: 'video/mp4' }] : []),
+  ...(props.content.videoVersions || []).filter(v => v.status === 'done' && v.url).map(v => ({ src: v.url!, label: v.resolution, type: 'video/mp4' }))
+])
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('zh-CN', {

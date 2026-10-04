@@ -5,7 +5,7 @@
     :aria-label="`查看${title}的地图`"
   >
     <div class="trip-cover">
-      <img
+      <MediaImage :renditions="trip.renditions"
         v-if="trip.coverUrl && !errored"
         :src="trip.coverUrl"
         :alt="title"
@@ -34,6 +34,8 @@
 </template>
 
 <script setup lang="ts">
+import MediaImage from './MediaImage.vue'
+
 import { computed, ref } from 'vue'
 import type { TripVO } from '../api/recommend'
 
@@ -105,13 +107,13 @@ const tripRoute = computed(() => {
   background: var(--surface);
   overflow: hidden;
 }
-.trip-cover img {
+.trip-cover :deep(img) {
   width: 100%;
   height: 100%;
   object-fit: cover;
   transition: transform 0.22s;
 }
-.trip-card:is(:hover, :focus-visible) img {
+.trip-card:is(:hover, :focus-visible) :deep(img) {
   transform: scale(1.025);
 }
 .cover-placeholder {

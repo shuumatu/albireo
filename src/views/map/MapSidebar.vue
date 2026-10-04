@@ -69,7 +69,7 @@
             @click="$emit('selectEntry', entry)"
           >
             <div class="entry-thumb-wrap">
-              <img
+              <MediaImage :renditions="entry.renditions"
                 :src="entry.thumb"
                 class="entry-thumb"
                 :alt="entry.title"
@@ -112,6 +112,9 @@
 </template>
 
 <script setup lang="ts">
+import type { MediaRendition } from '../../types/media'
+import MediaImage from '../../components/MediaImage.vue'
+
 import { NIcon, NScrollbar } from 'naive-ui'
 import {
   VideocamOutline,
@@ -128,6 +131,7 @@ export interface SidebarEntry {
   kind: 'cluster' | 'point'
   title: string
   subtitle: string
+  renditions?: MediaRendition[]
   thumb: string
   count: number
   videoCount: number
@@ -308,7 +312,7 @@ function onThumbError(event: Event) {
   background: var(--bg);
 }
 
-.entry-thumb {
+:deep(.entry-thumb) {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -317,7 +321,7 @@ function onThumbError(event: Event) {
 }
 
 .entry-item:hover .entry-thumb,
-.entry-item.hovered .entry-thumb {
+.entry-item.hovered :deep(.entry-thumb) {
   transform: scale(1.06);
 }
 
@@ -471,7 +475,7 @@ function onThumbError(event: Event) {
   white-space: nowrap;
 }
 .entry-thumb-wrap,
-.entry-thumb {
+:deep(.entry-thumb) {
   border-radius: 0;
 }
 .entry-item {

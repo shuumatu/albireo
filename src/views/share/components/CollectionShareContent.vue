@@ -2,7 +2,7 @@
   <n-card :bordered="false">
     <!-- 合集封面 -->
     <div v-if="collection.imageUrl" class="collection-cover">
-      <img :src="collection.imageUrl" :alt="collection.name" />
+      <MediaImage :renditions="collection.renditions" :src="collection.imageUrl" :alt="collection.name" />
     </div>
 
     <n-space vertical :size="12" style="margin-top: 16px">
@@ -47,7 +47,7 @@
         @click="openItem(item)"
       >
         <div class="item-cover">
-          <img
+          <MediaImage :renditions="item.renditions"
             v-if="getThumb(item)"
             :src="getThumb(item)!"
             :alt="getItemTitle(item)"
@@ -87,6 +87,8 @@
 </template>
 
 <script setup lang="ts">
+import MediaImage from '../../../components/MediaImage.vue'
+
 import { computed, ref } from 'vue'
 import ImageShareContent from './ImageShareContent.vue'
 import VideoShareContent from './VideoShareContent.vue'
@@ -190,7 +192,7 @@ function formatDate(dateStr: string) {
   background: var(--bg);
 }
 
-.collection-cover img {
+.collection-cover :deep(img) {
   width: 100%;
   max-height: 360px;
   object-fit: cover;
@@ -242,7 +244,7 @@ function formatDate(dateStr: string) {
   aspect-ratio: 16 / 9;
 }
 
-.item-cover img {
+.item-cover :deep(img) {
   width: 100%;
   height: 100%;
   object-fit: cover;

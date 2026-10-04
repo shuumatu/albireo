@@ -11,6 +11,7 @@ import {
 } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { layoutTimeline } from '../utils/timelineLayout'
+import type { MediaRendition } from '../types/media'
 import TimelineMedia from '../components/TimelineMedia.vue'
 defineOptions({ name: 'TimeLine' })
 import {
@@ -22,6 +23,7 @@ import {
 } from '../api/timeline'
 
 interface Photo {
+  renditions?: MediaRendition[]
   id: string
   url: string
   date: Date
@@ -262,6 +264,7 @@ const timeGroups = computed((): TimeGroup[] => {
             photos: photos.map((p) => {
               const displayUrl = getDisplayUrl(p)
               return {
+                renditions: p.renditions,
                 id: p.uuid,
                 url: displayUrl,
                 date: new Date(p.createdAt),
@@ -927,6 +930,7 @@ watch(windowHeight, () => {
                   :to="mediaDetailRoute(photo)"
                   :src="photo.url"
                   :preview-src="photo.thumbnailUrl"
+                  :renditions="photo.renditions"
                   :is-video="photo.mediaType === 'video' || !!photo.mediaType?.startsWith('video/')"
                   :width="photo.naturalWidth"
                   :height="photo.naturalHeight"

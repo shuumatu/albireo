@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import MediaImage from '../components/MediaImage.vue'
+
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
@@ -17,7 +19,8 @@ const image = ref<ImageInfoVO | null>(null),
   loaded = ref(false)
 const viewer = ref<InstanceType<typeof PhotoViewer>>()
 const stageButton = ref<HTMLButtonElement>()
-const stageImage = ref<HTMLImageElement>()
+const stageImageComponent = ref<InstanceType<typeof MediaImage>>()
+const stageImage = computed(() => stageImageComponent.value?.image)
 const viewerError = ref(false)
 const sourceIndex = ref(0)
 const imageAttempt = ref(0)
@@ -121,8 +124,8 @@ onBeforeUnmount(() => {
               aria-describedby="photo-open-hint"
               @click="open"
             >
-              <img
-                ref="stageImage"
+              <MediaImage :renditions="sourceIndex === 0 ? image.renditions : undefined" fit="contain" loading="eager"
+                ref="stageImageComponent"
                 :key="`${imageAttempt}-${src}`"
                 :src="src"
                 :alt="title"
@@ -269,7 +272,7 @@ onBeforeUnmount(() => {
   cursor: zoom-in;
   outline-offset: -4px;
 }
-.image-open img {
+.image-open :deep(img) {
   display: block;
   width: 100%;
   height: 100%;
@@ -281,7 +284,7 @@ onBeforeUnmount(() => {
     opacity 450ms ease,
     transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.is-loaded .image-open img {
+.is-loaded .image-open :deep(img) {
   opacity: 1;
   transform: scale(1);
 }
@@ -387,7 +390,7 @@ summary {
   .image-stage {
     min-height: 320px;
   }
-  .image-open img {
+  .image-open :deep(img) {
     max-height: 65dvh;
   }
 }
@@ -417,7 +420,7 @@ summary {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .image-open img {
+  .image-open :deep(img) {
     transition: none;
     transform: none;
   }

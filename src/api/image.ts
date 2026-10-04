@@ -1,6 +1,8 @@
 import request from '../utils/request'
+import type { MediaRendition } from '../types/media'
 
 export interface ImageInfoVO {
+  renditions?: MediaRendition[]
   width?: number | null
   height?: number | null
   fileSize?: number | null

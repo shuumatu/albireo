@@ -48,7 +48,7 @@
           @mouseleave="$emit('hoverMedia', null)"
           @click="$emit('selectMedia', item)"
         >
-          <img
+          <MediaImage :renditions="item.renditions"
             :src="thumbResolver(item)"
             class="media-thumb"
             loading="lazy"
@@ -85,6 +85,8 @@
 </template>
 
 <script setup lang="ts">
+import MediaImage from '../../components/MediaImage.vue'
+
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { NDrawer, NDrawerContent, NIcon, NSpin } from 'naive-ui'
 import { VideocamOutline, ImageOutline, LayersOutline } from '@vicons/ionicons5'
@@ -236,7 +238,7 @@ function onScroll(e: Event) {
   z-index: 2;
 }
 
-.cluster-drawer .media-thumb {
+.cluster-drawer :deep(.media-thumb) {
   width: 100%;
   height: 100%;
   object-fit: cover;

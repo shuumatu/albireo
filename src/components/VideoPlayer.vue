@@ -1,500 +1,299 @@
 <template>
-  <div class="video-player-container">
+  <div class="video-player-container" tabindex="0" @keydown="handleKeydown" @click.capture="captureIntent">
     <video-player
-      ref="videoPlayerRef"
-      :poster="poster"
-      :controls="true"
-      :playback-rates="playbackRates"
-      :fluid="true"
-      :aspect-ratio="'16:9'"
-      :picture-in-picture="true"
+      :poster="poster" :cross-origin="playback ? 'use-credentials' : undefined" :controls="true" :playback-rates="[0.5, 0.75, 1, 1.25, 1.5, 2]"
+      :fluid="true" :aspect-ratio="aspectRatio" :picture-in-picture="true"
+      :html5="{ vhs: { withCredentials: true } }"
       class="video-js vjs-big-play-centered theme-archive"
-      @mounted="handleMounted"
-      @ready="handleReady"
+      @mounted="handleMounted" @ready="handleReady"
     />
+    <p v-if="feedback" class="quality-feedback" role="status" aria-live="polite">{{ feedback }}</p>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, shallowRef, onBeforeUnmount, onMounted, watch } from 'vue'
+import { computed, ref, shallowRef, watch, onBeforeUnmount } from 'vue'
 import { VideoPlayer } from '@videojs-player/vue'
 import videojs from 'video.js'
 import type Player from 'video.js/dist/types/player'
 import type Component from 'video.js/dist/types/component'
 import type MenuButtonType from 'video.js/dist/types/menu/menu-button'
 import type MenuItemType from 'video.js/dist/types/menu/menu-item'
-
-type GalleryPlayer = Player & {
-  controlBar: Component
-  _customCleanup?: () => void
-}
-type QualityOptions = {
-  label: string
-  qualityLabel: string
-  qualityIndex: number
-}
-// Video.js discovers custom components at runtime; its base declaration loses the subtype.
-type QualityButton = Component & {
-  items: Array<MenuItemType & { qualityIndex: number }>
-  update(): void
-  updateButtonText(): void
-}
-
-import 'video.js/dist/video-js.css'
 import type { VideoSource } from '../types/video'
+import type { VideoPlayback } from '../types/media'
+import { qualityChoices, variantFor, legacyQuality, defaultLegacy, type QualityKey } from '../utils/mediaQuality'
+import 'video.js/dist/video-js.css'
 
-interface Props {
-  poster?: string
-  videoSources: VideoSource[]
-}
-
-const props = withDefaults(defineProps<Props>(), {
-  poster: ''
-})
-
-const emit = defineEmits<{ playing: []; pause: [] }>()
-
-const sources = ref<VideoSource[]>(props.videoSources)
-const playbackRates = ref([0.5, 0.75, 1, 1.25, 1.5, 2])
-
-// 状态
-const videoPlayerRef = ref(null)
+type Representation = { id: string; width: number; height: number; enabled(value?: boolean): boolean }
+type Vhs = { representations(): Representation[] }
+type GalleryPlayer = Player & { controlBar: Component }
+type QualityButton = Component & { update(): void; updateButtonText(): void; items: Array<MenuItemType & { key: QualityKey }> }
+const props = withDefaults(defineProps<{ poster?: string; videoSources?: VideoSource[]; playback?: VideoPlayback }>(), { poster: '', videoSources: () => [] })
+const emit = defineEmits<{ playing: []; pause: []; qualitySwitchError: [message: string] }>()
 const player = shallowRef<GalleryPlayer | null>(null)
-const currentQuality = ref(0)
-let qualityButton: QualityButton | null = null
-let cancelQualitySwitch: (() => void) | null = null
-// 同步 props 到本地状态，并在数据变化时纠正 currentQuality
-watch(
-  () => props.videoSources,
-  (val) => {
-    sources.value = Array.isArray(val) ? val : []
-    if (currentQuality.value >= sources.value.length) {
-      currentQuality.value = 0
-    }
-  },
-  { immediate: true, deep: true }
-)
-// Manage sources here so the wrapper does not load the same source again when
-// currentQuality changes. Metadata can also arrive after the player is ready.
-const syncSources = () => {
-  const instance = player.value
-  if (!instance || instance.isDisposed()) return
-  cancelQualitySwitch?.()
-  syncQualityButton(true)
-  const source = sources.value[currentQuality.value]
-  if (source?.src && instance.currentSrc() !== source.src) {
-    instance.src({ src: source.src, type: source.type })
-    instance.load()
-  }
-}
-watch(sources, syncSources, { deep: true, flush: 'post' })
-watch(player, syncSources, { flush: 'post' })
-
-watch(currentQuality, () => qualityButton?.updateButtonText(), {
-  flush: 'sync'
+const selection = ref<QualityKey>('auto')
+const actual = ref('')
+const switching = ref(false)
+const feedback = ref('')
+const unsupported = ref(new Set<string>())
+const aspectRatio = computed(() => {
+  const source = variantFor(props.playback, 'source') || props.playback?.variants.find(v => v.available)
+  // Keep tall videos visible without taking several screen heights.
+  return source?.width && source.height ? `${Math.round(Math.max(source.width / source.height, 0.7) * 1000)}:1000` : '16:9'
 })
-
-// 键盘事件处理
-const handleKeydown = (event: KeyboardEvent) => {
-  if (!player.value) return
-
-  // 如果焦点在输入框或文本区域，不处理键盘事件
-  const target = event.target as HTMLElement
-  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+let qualityButton: QualityButton | undefined
+let cleanupSwitch: (() => void) | undefined
+let cleanupEvents: (() => void) | undefined
+let sourceSnapshot: { time: number; rate: number; started: boolean } | undefined
+let desiredPaused = true
+let lastSuccessful: QualityKey = 'auto'
+let recoveringSwitch = false
+let generation = 0
+let streamKey = ''
+let timeout: ReturnType<typeof setTimeout> | undefined
+const currentLabel = computed(() => {
+  const label = qualityChoices.find(q => q.key === selection.value)?.label || '自动'
+  return `${label}${selection.value === 'auto' && actual.value ? ` · ${actual.value}` : ''}${switching.value ? '…' : ''}`
+})
+function vhs(): Vhs | undefined {
+  return (player.value?.tech(true) as unknown as { vhs?: Vhs })?.vhs
+}
+function unavailable(key: QualityKey): string {
+  if (key === 'auto') return props.playback ? '' : '完成 HLS 升级后可自动选择'
+  if (!props.playback) return props.videoSources.some(s => legacyQuality(s) === key) ? '' : '此档暂不可用'
+  const variant = variantFor(props.playback, key)
+  if (!variant?.available) return variant?.reason || '源分辨率不足或尚未生成'
+  if (unsupported.value.has(variant.id)) return '当前设备无法解码'
+  return ''
+}
+function updateMenu(rebuild = false) {
+  if (rebuild) qualityButton?.update()
+  qualityButton?.updateButtonText()
+}
+function clearPending() {
+  cleanupSwitch?.()
+  cleanupSwitch = undefined
+  clearTimeout(timeout)
+}
+function finishSwitch() {
+  clearPending()
+  sourceSnapshot = undefined
+  switching.value = false
+  lastSuccessful = selection.value
+  updateMenu()
+}
+function showError(message: string) {
+  feedback.value = message
+  emit('qualitySwitchError', message)
+}
+function reportActual() {
+  const instance = player.value
+  if (!instance) return
+  const width = instance.videoWidth(), height = instance.videoHeight()
+  const variant = props.playback?.variants.find(v => v.available && v.width === width && v.height === height)
+  actual.value = variant?.label || (height ? `${Math.min(width, height)}p` : '')
+  const target = variantFor(props.playback, selection.value)
+  if (switching.value && !sourceSnapshot && (selection.value === 'auto' || (target?.width === width && target.height === height))) finishSwitch()
+  updateMenu()
+}
+function applyRepresentations(): boolean {
+  const handler = vhs()
+  const representations = typeof handler?.representations === 'function' ? handler.representations() : []
+  if (!representations.length || !props.playback) return false
+  const target = selection.value === 'auto' ? undefined : variantFor(props.playback, selection.value)
+  const allowed = representations.filter(rep => {
+    const supported = props.playback!.variants.some(v => v.available && !unsupported.value.has(v.id) && v.width === rep.width && v.height === rep.height)
+    return supported && (!target || (target.width === rep.width && target.height === rep.height))
+  })
+  if (!allowed.length) return false
+  // Enable the destination before disabling others; VHS always has an eligible rendition.
+  allowed.forEach(rep => rep.enabled(true))
+  representations.filter(rep => !allowed.includes(rep)).forEach(rep => rep.enabled(false))
+  return true
+}
+function armTimeout() {
+  clearTimeout(timeout)
+  if (!switching.value || desiredPaused) return
+  timeout = setTimeout(() => {
+    if (!switching.value) return
+    if (recoveringSwitch) {
+      clearPending(); sourceSnapshot = undefined; switching.value = false
+      showError('视频加载超时，请检查连接后重新打开。'); updateMenu(); return
+    }
+    const fallback = props.playback ? 'auto' : lastSuccessful
+    showError('清晰度切换超时，已恢复可用档位。')
+    selectQuality(fallback, true)
+  }, 45000)
+}
+function selectQuality(key: QualityKey, recovering = false) {
+  const instance = player.value
+  if (!instance || instance.isDisposed() || unavailable(key) || (!recovering && key === selection.value)) return
+  clearPending()
+  generation++
+  if (!recovering) feedback.value = ''
+  selection.value = key
+  recoveringSwitch = recovering
+  switching.value = true
+  updateMenu()
+  if (props.playback && vhs() && !instance.error()) {
+    applyRepresentations()
+    reportActual()
+    armTimeout()
     return
   }
-
-  switch (event.code) {
-    case 'Space':
-      // 空格键：播放/暂停
-      event.preventDefault()
-      if (player.value.paused()) {
-        player.value.play()
-      } else {
-        player.value.pause()
-      }
-      break
-
-    case 'ArrowLeft':
-      // 左方向键：后退5秒
-      event.preventDefault()
-      const currentTimeLeft = player.value.currentTime() ?? 0
-      player.value.currentTime(Math.max(0, currentTimeLeft - 3))
-      break
-
-    case 'ArrowRight':
-      // 右方向键：前进5秒
-      event.preventDefault()
-      const currentTimeRight = player.value.currentTime() ?? 0
-      const duration = player.value.duration() ?? 0
-      player.value.currentTime(Math.min(duration, currentTimeRight + 3))
-      break
-
-    case 'ArrowUp':
-      // 上方向键：增加音量（可选）
-      event.preventDefault()
-      const currentVolume = player.value.volume() ?? 1
-      player.value.volume(Math.min(1, currentVolume + 0.1))
-      break
-
-    case 'ArrowDown':
-      // 下方向键：减少音量（可选）
-      event.preventDefault()
-      const volume = player.value.volume() ?? 1
-      player.value.volume(Math.max(0, volume - 0.1))
-      break
+  // Safari native HLS receives a single-variant master including shared audio.
+  const source = props.playback
+    ? { src: key === 'auto' ? props.playback.masterUrl : variantFor(props.playback, key)?.url, type: 'application/x-mpegURL' }
+    : props.videoSources.find(s => legacyQuality(s) === key)
+  if (!source?.src) { switching.value = false; showError('此清晰度暂不可用。'); return }
+  if (instance.currentSrc() === source.src && !sourceSnapshot) { finishSwitch(); return }
+  sourceSnapshot ||= { time: instance.currentTime() || 0, rate: instance.playbackRate() || 1, started: instance.hasClass('vjs-has-started') }
+  const saved = sourceSnapshot
+  const token = generation
+  const current = () => token === generation && !instance.isDisposed()
+  const onMetadata = () => {
+    if (!current()) return
+    const duration = instance.duration()
+    instance.currentTime(Number.isFinite(duration) ? Math.min(saved.time, Math.max(0, (duration || 0) - 0.05)) : saved.time)
+    instance.playbackRate(saved.rate)
+    instance.hasStarted(saved.started)
   }
-}
-
-// 创建清晰度选择组件
-const createQualityComponents = () => {
-  const MenuButton = videojs.getComponent(
-    'MenuButton'
-  ) as unknown as typeof MenuButtonType
-  const MenuItem = videojs.getComponent('MenuItem') as typeof MenuItemType
-
-  // 清晰度菜单项
-  class QualityMenuItem extends MenuItem {
-    qualityIndex: number
-    qualityLabel: string
-    constructor(player: Player, options: QualityOptions) {
-      super(player, { ...options, selectable: true })
-      this.qualityIndex = options.qualityIndex
-      this.qualityLabel = options.qualityLabel
-      this.selected(this.qualityIndex === currentQuality.value)
-    }
-
-    handleClick() {
-      const source = sources.value[this.qualityIndex]
-      const previousSource = sources.value[currentQuality.value]
-      if (
-        !source ||
-        !previousSource ||
-        this.qualityIndex === currentQuality.value
-      ) {
-        return
-      }
-
-      cancelQualitySwitch?.()
-      const instance = this.player()
-      const previousQuality = currentQuality.value
-      const currentTime = instance.currentTime() ?? 0
-      const wasPaused = instance.paused()
-      const currentRate = instance.playbackRate() ?? 1
-      const hadStarted = instance.hasClass('vjs-has-started')
-
-      const restorePlayback = () => {
-        instance.currentTime(currentTime)
-        instance.playbackRate(currentRate)
-        instance.hasStarted(hadStarted)
-        if (!wasPaused) {
-          instance.play()?.catch((error: Error) => {
-            // A new switch or pause can cancel the pending playback request.
-            if (error.name !== 'AbortError')
-              console.error('恢复播放失败:', error)
-          })
-        }
-      }
-
-      const cleanup = () => {
-        instance.off('loadedmetadata', onLoadedMetadata)
-        instance.off('loadedmetadata', onFallbackLoaded)
-        instance.off('error', onError)
-        if (cancelQualitySwitch === cleanup) cancelQualitySwitch = null
-      }
-
-      // 先更新选中状态和索引
-      currentQuality.value = this.qualityIndex
-
-      // 监听加载成功
-      const onLoadedMetadata = () => {
-        cleanup()
-        restorePlayback()
-      }
-
-      const onFallbackLoaded = () => {
-        cleanup()
-        restorePlayback()
-      }
-
-      // 监听加载失败
-      const onError = () => {
-        console.error(`清晰度 ${source.label} 加载失败:`, instance.error())
-        cleanup()
-
-        // 回退到之前的清晰度
-        currentQuality.value = previousQuality
-        cancelQualitySwitch = cleanup
-        instance.one('loadedmetadata', onFallbackLoaded)
-        instance.src({ src: previousSource.src, type: previousSource.type })
-
-        // 显示错误提示（可选）
-        instance.trigger('qualitySwitchError', {
-          attemptedQuality: source.label,
-          fallbackQuality: previousSource.label
-        })
-      }
-
-      // 添加监听
-      cancelQualitySwitch = cleanup
-      instance.one('loadedmetadata', onLoadedMetadata)
-      instance.one('error', onError)
-      instance.src({ src: source.src, type: source.type })
-    }
-  }
-
-  // 清晰度菜单按钮
-  class QualityMenuButton extends MenuButton {
-    constructor(player: Player, options: Record<string, unknown>) {
-      super(player, options)
-      this.addClass('vjs-quality-button')
-    }
-
-    createEl() {
-      const el = super.createEl()
-      return el
-    }
-
-    buildCSSClass() {
-      return `vjs-quality-menu-button ${super.buildCSSClass()}`
-    }
-
-    createItems() {
-      // 确保有视频源才创建菜单项
-      if (!sources.value.length) {
-        return []
-      }
-      const items = sources.value.map((source, index) => {
-        return new QualityMenuItem(this.player(), {
-          label: source.label,
-          qualityLabel: source.label,
-          qualityIndex: index
-        })
-      })
-      return items
-    }
-
-    updateButtonText() {
-      const items = (this as unknown as QualityButton).items
-      items?.forEach((item) =>
-        item.selected(item.qualityIndex === currentQuality.value)
-      )
-      // 安全检查：确保 sources 和当前索引有效
-      if (!sources.value.length || !sources.value[currentQuality.value]) {
-        return
-      }
-      const currentLabel = sources.value[currentQuality.value].label
-      const iconEl = this.el().querySelector('.vjs-icon-placeholder')
-      if (iconEl) {
-        iconEl.setAttribute('data-quality', currentLabel)
-      }
-      const labelEl = this.el().querySelector('.vjs-menu-button-text')
-      if (labelEl) {
-        labelEl.textContent = currentLabel
-      }
-    }
-  }
-
-  // Keep the component local: each player's menu closes over its own sources.
-  return QualityMenuButton
-}
-
-const syncQualityButton = (rebuildMenu = false) => {
-  const instance = player.value
-  if (!instance || instance.isDisposed() || !instance._customCleanup) return
-
-  const controlBar = instance.controlBar
-  if (sources.value.length <= 1) {
-    if (qualityButton) {
-      controlBar.removeChild(qualityButton)
-      qualityButton.dispose()
-      qualityButton = null
-    }
-    return
-  }
-
-  if (!qualityButton) {
-    const QualityMenuButton = createQualityComponents()
-    const nextControl =
-      controlBar.getChild('PictureInPictureToggle') ||
-      controlBar.getChild('FullscreenToggle')
-    const insertIndex = nextControl
-      ? controlBar.children().indexOf(nextControl)
-      : controlBar.children().length
-    qualityButton = controlBar.addChild(
-      new QualityMenuButton(instance, {}) as unknown as Component,
-      {},
-      insertIndex
-    ) as QualityButton
-  } else if (rebuildMenu) {
-    qualityButton.update()
-  }
-  qualityButton.updateButtonText()
-}
-
-// 生命周期
-onMounted(() => {
-  // 添加键盘事件监听
-  window.addEventListener('keydown', handleKeydown)
-})
-
-onBeforeUnmount(() => {
-  // 移除键盘事件监听
-  window.removeEventListener('keydown', handleKeydown)
-  cancelQualitySwitch?.()
-  qualityButton = null
-
-  if (player.value) {
-    // 调用自定义清理函数
-    if (player.value._customCleanup) {
-      player.value._customCleanup()
-    }
-    player.value.dispose()
-  }
-})
-
-// 事件处理
-const handleMounted = ({ player: videoPlayer }: { player: Player }) => {
-  player.value = videoPlayer as GalleryPlayer
-  console.log('播放器已挂载')
-}
-
-const handleReady = () => {
-  console.log('播放器已就绪')
-
-  const instance = player.value
-  if (!instance || instance.isDisposed()) return
-  // Video.js emits ready again after loading a new source. Setup must be
-  // idempotent so both controls and event handlers remain unique.
-  if (instance._customCleanup) {
-    syncQualityButton()
-    return
-  }
-
-  try {
-    // 设置用户不活动超时时间（1秒后隐藏控制栏）
-    instance.options_.inactivityTimeout = 1000
-
-    // 确保控制栏自动隐藏功能启用
-    instance.options({
-      userActions: {
-        hotkeys: false // 禁用默认热键，使用我们自定义的
-      }
+  const onPlayable = () => {
+    if (!current() || instance.seeking() || Math.abs((instance.currentTime() || 0) - saved.time) > 1) return
+    finishSwitch()
+    if (desiredPaused) instance.pause()
+    else instance.play()?.catch(error => {
+      if (error.name !== 'AbortError') showError('浏览器暂停了自动恢复播放，请点击播放。')
     })
-
-    // 手动触发用户活动，确保控制栏显示逻辑正常
-    instance.userActive(true)
-
-    const controlBar = instance.controlBar
-
-    const volumePanel = controlBar.getChild('VolumePanel')
-
-    if (volumePanel) {
-      controlBar.removeChild(volumePanel)
-      const playbackRateMenu = controlBar.getChild('PlaybackRateMenuButton')
-
-      if (playbackRateMenu) {
-        const playbackRateIndex = controlBar
-          .children()
-          .indexOf(playbackRateMenu)
-        controlBar.addChild(volumePanel, {}, playbackRateIndex)
-      } else {
-        const insertIndex = controlBar.children().length - 1
-        controlBar.addChild(volumePanel, {}, insertIndex)
-      }
-    }
-
-    // 移除 Video.js 控件聚焦问题并设置鼠标事件
-    const playerEl = instance.el()
-
-    // 捕获所有 focus 事件
-    const handleFocus = (e: Event) => {
-      const target = e.target as HTMLElement
-      if (
-        target.classList.contains('vjs-control') || // 普通控件
-        target.closest('.vjs-menu-button') || // 菜单类控件（倍速、清晰度等）
-        target.classList.contains('vjs-picture-in-picture-control') ||
-        target.classList.contains('vjs-fullscreen-control')
-      ) {
-        target.blur()
-        e.stopPropagation()
-      }
-    }
-    playerEl.addEventListener('focus', handleFocus, true)
-
-    // 重要：移除之前可能存在的监听器，然后添加新的
-    let inactivityTimer: ReturnType<typeof setTimeout> | null = null
-    let rafId: number | null = null
-
-    const resetInactivityTimer = () => {
-      if (inactivityTimer) {
-        clearTimeout(inactivityTimer)
-      }
-      instance.userActive(true)
-      inactivityTimer = setTimeout(() => {
-        instance.userActive(false)
-      }, 1000)
-    }
-
-    // 节流 mousemove，避免播放时主线程被频繁调用导致卡顿
-    const throttledResetInactivity = () => {
-      if (rafId !== null) return
-      rafId = requestAnimationFrame(() => {
-        rafId = null
-        resetInactivityTimer()
+  }
+  const onError = () => {
+    if (!current()) return
+    clearPending()
+    switching.value = false
+    showError(recovering ? '视频加载失败，请检查连接后重新打开。' : '该档加载失败，正在恢复可用档位。')
+    if (!recovering) selectQuality(props.playback ? 'auto' : lastSuccessful, true)
+    else sourceSnapshot = undefined
+  }
+  instance.on('loadedmetadata', onMetadata)
+  instance.on('canplay', onPlayable)
+  instance.on('seeked', onPlayable)
+  instance.on('error', onError)
+  cleanupSwitch = () => {
+    instance.off('loadedmetadata', onMetadata); instance.off('canplay', onPlayable)
+    instance.off('seeked', onPlayable); instance.off('error', onError)
+  }
+  instance.src({ src: source.src, type: source.type })
+  instance.load()
+  armTimeout()
+}
+function syncSource() {
+  const instance = player.value
+  if (!instance || !cleanupEvents) return
+  const nextKey = props.playback?.masterUrl || props.videoSources.map(s => s.src).join('|')
+  if (streamKey === nextKey) return
+  streamKey = nextKey
+  clearPending(); generation++; sourceSnapshot = undefined; switching.value = false
+  desiredPaused = true; feedback.value = ''; actual.value = ''; unsupported.value = new Set()
+  selection.value = props.playback ? 'auto' : defaultLegacy(props.videoSources) as QualityKey
+  lastSuccessful = selection.value
+  updateMenu(true)
+  const source = props.playback ? { src: props.playback.masterUrl, type: 'application/x-mpegURL' }
+    : props.videoSources.find(s => legacyQuality(s) === selection.value)
+  if (source?.src) { instance.src(source); instance.load() }
+  void probeSupport()
+}
+async function probeSupport() {
+  const playback = props.playback
+  if (!playback || !navigator.mediaCapabilities?.decodingInfo) return
+  const rejected = new Set<string>()
+  await Promise.all(playback.variants.filter(v => v.available && v.codecs).map(async v => {
+    try {
+      const result = await navigator.mediaCapabilities.decodingInfo({
+        type: vhs() ? 'media-source' : 'file', video: { contentType: `video/mp4; codecs="${v.codecs!.split(',')[0]}"`, width: v.width, height: v.height,
+          bitrate: v.averageBandwidth || v.bandwidth || Math.max(1000000, v.width * v.height * 4), framerate: v.frameRate || 30 }
       })
+      if (!result.supported) rejected.add(v.id)
+    } catch { /* Unknown codecs stay available; normal player error handling remains active. */ }
+  }))
+  if (props.playback !== playback) return
+  unsupported.value = rejected
+  if (selection.value !== 'auto' && unavailable(selection.value)) {
+    showError('当前设备无法解码该清晰度，已切回自动。')
+    selectQuality('auto', true)
+  } else applyRepresentations()
+  updateMenu(true)
+}
+function createQualityButton(instance: GalleryPlayer) {
+  const MenuButton = videojs.getComponent('MenuButton') as unknown as typeof MenuButtonType
+  const MenuItem = videojs.getComponent('MenuItem') as typeof MenuItemType
+  class QualityItem extends MenuItem {
+    key: QualityKey
+    constructor(p: Player, choice: typeof qualityChoices[number]) {
+      const reason = unavailable(choice.key)
+      super(p, { label: choice.label, selectable: true })
+      this.key = choice.key
+      this.selected(this.key === selection.value)
+      this.el().setAttribute('aria-disabled', String(!!reason))
+      this.el().setAttribute('title', reason || '')
+      if (reason) this.addClass('quality-unavailable')
     }
-
-    const handleMouseLeave = () => {
-      if (inactivityTimer) {
-        clearTimeout(inactivityTimer)
-        inactivityTimer = null
-      }
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId)
-        rafId = null
-      }
-      instance.userActive(false)
+    handleClick() { if (!unavailable(this.key)) selectQuality(this.key) }
+  }
+  class QualityMenu extends MenuButton {
+    buildWrapperCSSClass() { return `vjs-quality-menu-button ${super.buildWrapperCSSClass()}` }
+    createItems() { return qualityChoices.map(choice => new QualityItem(this.player(), choice)) }
+    updateButtonText() {
+      ;(this as unknown as QualityButton).items?.forEach(item => item.selected(item.key === selection.value))
+      this.el().querySelector('.vjs-icon-placeholder')?.setAttribute('data-quality', currentLabel.value)
+      this.controlText(`清晰度：${currentLabel.value}`)
     }
-
-    const handleMouseEnter = () => {
-      resetInactivityTimer()
-    }
-
-    playerEl.addEventListener('mousemove', throttledResetInactivity)
-    playerEl.addEventListener('mouseleave', handleMouseLeave)
-    playerEl.addEventListener('mouseenter', handleMouseEnter)
-
-    const onPlay = () => emit('playing')
-    const onPause = () => emit('pause')
-    instance.on('play', onPlay)
-    instance.on('pause', onPause)
-
-    // 清理函数（使用同一引用才能正确移除监听）
-    const cleanup = () => {
-      if (inactivityTimer) {
-        clearTimeout(inactivityTimer)
-        inactivityTimer = null
-      }
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId)
-        rafId = null
-      }
-      instance.off('play', onPlay)
-      instance.off('pause', onPause)
-      playerEl.removeEventListener('focus', handleFocus, true)
-      playerEl.removeEventListener('mousemove', throttledResetInactivity)
-      playerEl.removeEventListener('mouseleave', handleMouseLeave)
-      playerEl.removeEventListener('mouseenter', handleMouseEnter)
-    }
-
-    // 保存清理函数以便后续使用
-    instance._customCleanup = cleanup
-    syncQualityButton()
-  } catch (error) {
-    console.error('初始化清晰度按钮失败:', error)
+  }
+  qualityButton = instance.controlBar.addChild(new QualityMenu(instance, {}) as unknown as Component, {}, instance.controlBar.children().length - 1) as QualityButton
+}
+function captureIntent(event: MouseEvent) {
+  if ((event.target as HTMLElement).closest('.vjs-play-control, .vjs-big-play-button')) {
+    desiredPaused = sourceSnapshot ? !desiredPaused : !player.value?.paused()
+    if (desiredPaused) clearTimeout(timeout)
+    else armTimeout()
   }
 }
+function handleKeydown(event: KeyboardEvent) {
+  const instance = player.value
+  if (!instance || (event.target as HTMLElement).closest('input, textarea, select, button, [role="menuitemradio"]')) return
+  if (event.code === 'Space') {
+    event.preventDefault(); desiredPaused = !desiredPaused
+    if (desiredPaused) instance.pause(); else void instance.play()
+  } else if (event.code === 'ArrowLeft' || event.code === 'ArrowRight') {
+    event.preventDefault(); instance.currentTime(Math.max(0, (instance.currentTime() || 0) + (event.code === 'ArrowLeft' ? -3 : 3)))
+  }
+}
+function handleMounted({ player: instance }: { player: Player }) { player.value = instance as GalleryPlayer }
+function handleReady() {
+  const instance = player.value
+  if (!instance || cleanupEvents) return
+  const onPlay = () => { if (!sourceSnapshot) desiredPaused = false; armTimeout(); emit('playing') }
+  const onPause = () => { if (!sourceSnapshot) desiredPaused = true; clearTimeout(timeout); emit('pause') }
+  const onRepresentations = () => { applyRepresentations(); reportActual() }
+  const onError = () => {
+    if (!sourceSnapshot && props.playback && selection.value !== 'auto') {
+      showError('当前清晰度播放失败，已切回自动。'); selectQuality('auto', true)
+    }
+  }
+  instance.on('play', onPlay); instance.on('pause', onPause)
+  instance.on('loadedmetadata', onRepresentations); instance.on('loadedplaylist', onRepresentations)
+  instance.on('timeupdate', reportActual); instance.on('resize', reportActual); instance.on('error', onError)
+  cleanupEvents = () => {
+    instance.off('play', onPlay); instance.off('pause', onPause)
+    instance.off('loadedmetadata', onRepresentations); instance.off('loadedplaylist', onRepresentations)
+    instance.off('timeupdate', reportActual); instance.off('resize', reportActual); instance.off('error', onError)
+  }
+  createQualityButton(instance); syncSource()
+}
+watch(() => [props.playback, props.videoSources], syncSource, { deep: true, flush: 'post' })
+onBeforeUnmount(() => {
+  generation++; clearPending(); cleanupEvents?.(); qualityButton = undefined
+  if (player.value && !player.value.isDisposed()) player.value.dispose()
+})
 </script>
 
 <style>
@@ -507,7 +306,7 @@ const handleReady = () => {
   contain: layout style;
 }
 
-/* 固定 16:9 视窗，竖屏视频两侧黑边（pillarbox），横屏正常或上下黑边（letterbox） */
+/* Preserve media aspect ratio, with contain for tall videos. */
 .video-player-container .video-js {
   background: #000;
 }
@@ -699,5 +498,19 @@ const handleReady = () => {
   .vjs-quality-menu-button .vjs-menu-button-text {
     display: none;
   }
+}
+.quality-feedback { padding: 8px 12px; margin: 0; color: var(--star-gold); font-size: 13px; background: #151515; }
+.theme-archive .vjs-quality-menu-button { width: 8em; }
+.quality-unavailable { opacity: .4; cursor: not-allowed !important; }
+@media (max-width: 600px) {
+  .theme-archive .vjs-volume-panel,
+  .theme-archive .vjs-picture-in-picture-control,
+  .theme-archive .vjs-remaining-time { display: none !important; }
+  .theme-archive .vjs-control { width: 3em; }
+  .theme-archive .vjs-current-time,
+  .theme-archive .vjs-duration { width: 2.8em; min-width: 2.8em; padding: 0 .25em; }
+  .theme-archive .vjs-time-divider { width: .7em; min-width: .7em; padding: 0; }
+  .theme-archive .vjs-quality-menu-button { width: 7em; }
+  .theme-archive .vjs-quality-menu-button .vjs-icon-placeholder::before { font-size: 1em; }
 }
 </style>

@@ -1,10 +1,12 @@
 import request from '../utils/request'
+import type { MediaRendition } from '../types/media'
 
 /**
  * 首页推荐接口的统一卡片对象。
  * 与后端 RecommendItemVO 保持一致。
  */
 export interface RecommendItemVO {
+  renditions?: MediaRendition[]
   /** image 或 video，决定前端跳转路由 */
   itemType: 'image' | 'video'
   id: number
@@ -39,6 +41,7 @@ export interface HotRecommendVO {
  * 旅途回忆卡片。一次旅途 = 一个 (年, 月, ≈50km 网格) 内拍摄的内容聚合。
  */
 export interface TripVO {
+  renditions?: MediaRendition[]
   /** 形如 "2024-07_139_35"（年月_经度网格_纬度网格），仅作前端 v-for key 用 */
   tripId: string
   year: number

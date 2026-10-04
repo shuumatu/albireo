@@ -4,12 +4,14 @@ import { useRoute, useRouter } from 'vue-router'
 import VideoPlayer from '../components/VideoPlayer.vue'
 import CommentSection from '../components/CommentSection.vue'
 import SimilarStrip from '../components/SimilarStrip.vue'
+import type { VideoPlayback } from '../types/media'
 import type { VideoSource } from '../types/video'
 import { getVideoInfo } from '../api/video'
 import dayjs from 'dayjs'
 const route = useRoute(),
   router = useRouter(),
   uuid = String(route.params.uuid)
+const playback = ref<VideoPlayback>()
 const videoSources = ref<VideoSource[]>([]),
   posterUrl = ref(''),
   loading = ref(true),
@@ -48,8 +50,9 @@ async function load() {
           type: 'video/mp4'
         })
     }
+    playback.value = v.playback
     videoSources.value = sources
-    posterUrl.value = v.coverUrl || ''
+    posterUrl.value = v.posterUrl || v.coverUrl || ''
   } catch {
     error.value = true
   } finally {
@@ -74,7 +77,8 @@ onMounted(load)
       ><div class="video-grid">
         <div class="video-stage">
           <VideoPlayer
-            v-if="videoSources.length"
+            v-if="playback || videoSources.length"
+            :playback="playback"
             :video-sources="videoSources"
             :poster="posterUrl"
           />

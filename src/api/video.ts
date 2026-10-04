@@ -1,4 +1,5 @@
 import request from "../utils/request";
+import type { VideoPlayback, MediaRendition } from '../types/media';
 
 /** 已登记版本的授权播放地址。 */
 export interface VideoVersion {
@@ -10,6 +11,9 @@ export interface VideoVersion {
 }
 
 interface videoData {
+  playback?: VideoPlayback;
+  posterUrl?: string;
+  renditions?: MediaRendition[];
   objectKey: string;
   sourceUrl?: string | null;
   title: string;

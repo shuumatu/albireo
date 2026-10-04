@@ -1,4 +1,5 @@
 import request from "../utils/request";
+import type { MediaRendition } from '../types/media';
 
 // 时间轴统计数据接口
 interface TimelineStatistics {
@@ -17,6 +18,7 @@ interface MonthlyCount {
 
 // 月份桶数据接口
 interface BucketPhoto {
+  renditions?: MediaRendition[];
   uuid: string;
   objectKey: string;
   createdAt: string;      // ISO 8601 格式

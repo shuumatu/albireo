@@ -5,7 +5,7 @@
     :to="detailRoute"
   >
     <div class="media-thumb">
-      <img
+      <MediaImage :renditions="item.renditions"
         v-if="thumbSrc"
         :src="thumbSrc"
         :alt="displayTitle"
@@ -42,6 +42,8 @@
 </template>
 
 <script setup lang="ts">
+import MediaImage from './MediaImage.vue'
+
 import { computed, ref } from 'vue'
 import type { RecommendItemVO } from '../api/recommend'
 
@@ -109,14 +111,14 @@ function onImageError() {
   background: var(--surface);
   overflow: hidden;
 }
-.media-thumb img {
+.media-thumb :deep(img) {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
   transition: transform 0.22s;
 }
-.media-card:is(:hover, :focus-visible) img {
+.media-card:is(:hover, :focus-visible) :deep(img) {
   transform: scale(1.025);
 }
 .media-thumb:after {

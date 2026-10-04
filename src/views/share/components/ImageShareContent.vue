@@ -9,7 +9,7 @@
           重试
         </button>
       </div>
-      <img
+      <MediaImage :renditions="content.renditions" fit="contain" loading="eager"
         v-else
         :key="attempt"
         @error="failed = true"
@@ -31,6 +31,9 @@
 </template>
 
 <script setup lang="ts">
+import type { MediaRendition } from '../../../types/media'
+import MediaImage from '../../../components/MediaImage.vue'
+
 import { ref, watch } from 'vue'
 const failed = ref(false),
   attempt = ref(0)
@@ -41,6 +44,7 @@ function retry() {
 import { NCard, NSpace, NH3, NText } from 'naive-ui'
 const props = defineProps<{
   content: {
+    renditions?: MediaRendition[]
     objectKey: string
     fileName?: string
     imageUrl: string
@@ -77,7 +81,7 @@ function formatDate(dateStr: string) {
   text-align: center;
 }
 
-.share-image {
+:deep(.share-image) {
   max-width: 100%;
   max-height: 80vh;
   object-fit: contain;

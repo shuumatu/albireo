@@ -103,6 +103,8 @@
 </template>
 
 <script setup lang="ts">
+import { imageForSize } from '../utils/mediaQuality'
+
 import {
   ref,
   computed,
@@ -564,11 +566,7 @@ function createClusterMarkerElement(cluster: MapClusterVO): {
   el.style.width = `${size}px`
   el.style.height = `${size}px`
 
-  const thumbUrl = resolveThumbnail(
-    cluster.representativeObjectKey,
-    cluster.representativeThumbnailUrl,
-    cluster.representativeMediaType
-  )
+  const thumbUrl = imageForSize(cluster.renditions, cluster.representativeThumbnailUrl || '', size, size, 'cover', window.devicePixelRatio)
 
   // 结构说明（自外而内）：
   //   .marker-motion-wrapper  ← motion-v 控制（scale/translate 进入退出动画）
@@ -581,12 +579,13 @@ function createClusterMarkerElement(cluster: MapClusterVO): {
     <div class="marker-motion-wrapper">
       <div class="cluster-scale-layer">
         <div class="cluster-marker-inner">
-          <img src="${thumbUrl}" class="cluster-thumb" alt="" />
+          <img class="cluster-thumb" alt="" />
         </div>
         <span class="cluster-count">${cluster.count}</span>
       </div>
     </div>
   `
+  el.querySelector('img')!.src = thumbUrl
   const motionWrapper = el.querySelector(
     '.marker-motion-wrapper'
   ) as HTMLDivElement
@@ -602,21 +601,18 @@ function createPointMarkerElement(point: MapPointVO): {
   el.style.width = '60px'
   el.style.height = '60px'
 
-  const thumbUrl = resolveThumbnail(
-    point.objectKey,
-    point.thumbnailUrl,
-    point.mediaType
-  )
+  const thumbUrl = imageForSize(point.renditions, point.thumbnailUrl || '', 60, 60, 'cover', window.devicePixelRatio)
   const typeSvg = point.mediaType === 'video' ? VIDEO_SVG : IMAGE_SVG
 
   el.innerHTML = `
     <div class="marker-motion-wrapper">
       <div class="point-marker-inner">
-        <img src="${thumbUrl}" class="point-thumb" alt="" />
+        <img class="point-thumb" alt="" />
         <span class="point-type-badge ${point.mediaType}">${typeSvg}</span>
       </div>
     </div>
   `
+  el.querySelector('img')!.src = thumbUrl
   const motionWrapper = el.querySelector(
     '.marker-motion-wrapper'
   ) as HTMLDivElement
@@ -949,6 +945,7 @@ const allEntries = computed<SidebarEntry[]>(() => {
         c.representativeThumbnailUrl,
         c.representativeMediaType
       ),
+      renditions: c.renditions,
       count: c.count,
       videoCount: c.videoCount,
       imageCount: c.imageCount,
@@ -965,6 +962,7 @@ const allEntries = computed<SidebarEntry[]>(() => {
       title: pointTitleFromKey(p),
       subtitle: pointSubtitle(p),
       thumb: resolveThumbnail(p.objectKey, p.thumbnailUrl, p.mediaType),
+      renditions: p.renditions,
       count: 1,
       videoCount: p.mediaType === 'video' ? 1 : 0,
       imageCount: p.mediaType === 'image' ? 1 : 0,
