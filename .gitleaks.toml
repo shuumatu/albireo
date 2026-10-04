@@ -37,3 +37,26 @@ secretGroup = 1
 description = "Explicit non-secret API key templates"
 regexTarget = "secret"
 regexes = [ '''(?i)^-?(?:replace[-_].*|change[-_].*|example[-_].*|dummy[-_].*)$''' ]
+
+[[rules]]
+id = "quoted-credential"
+description = "Literal credentials in source code, JSON examples and documentation"
+regex = '''(?im)(?:\b[a-z0-9_.-]*(?:password|passwd|secret(?:accesskey)?|secret-access-key|accesskeyid|api[_-]?key|appkey|encryption[_.-]?key|(?:internal|gateway)[_.-]?token)\s*[:=]|(?:^[ \t]*|[,{][ \t]*)["\x27][a-z0-9_.-]*(?:password|passwd|secret(?:accesskey)?|secret-access-key|accesskeyid|api[_-]?key|appkey|encryption[_.-]?key|(?:internal|gateway)[_.-]?token)["\x27]\s*:)\s*["\x27]([^\s"\x27$<{`][^"\x27\r\n]{3,})["\x27]'''
+secretGroup = 1
+
+[[rules.allowlists]]
+description = "Explicit non-secret examples and deliberately invalid authentication fixtures"
+regexTarget = "secret"
+regexes = [ '''(?i)^(?:replace[-_].*|change[-_].*|example[-_].*|dummy[-_].*|your[-_].*|weak[-_].*|<.*>)$''' ]
+
+[[rules]]
+id = "connection-string-password"
+description = "Literal passwords inside documented connection strings"
+path = '''(?i)\.(?:md|ya?ml|properties|env|sql)$'''
+regex = '''(?im)(?:^|[;\s"\x27])(?:password|passwd|pwd)=["\x27]?([A-Za-z0-9][A-Za-z0-9_!@#%^&*./+~=-]{3,})'''
+secretGroup = 1
+
+[[rules.allowlists]]
+description = "Explicit connection-string templates"
+regexTarget = "secret"
+regexes = [ '''(?i)^(?:replace[-_].*|change[-_].*|example[-_].*|dummy[-_].*|your[-_].*)$''' ]
