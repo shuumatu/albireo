@@ -13,6 +13,7 @@ import { onBeforeRouteLeave } from 'vue-router'
 import { layoutTimeline } from '../utils/timelineLayout'
 import type { MediaRendition } from '../types/media'
 import TimelineMedia from '../components/TimelineMedia.vue'
+import { isAdminPreview } from '../utils/authSession'
 defineOptions({ name: 'TimeLine' })
 import {
   getTimelineStatistics,
@@ -853,7 +854,8 @@ watch(windowHeight, () => {
         v-if="!isInitializing && !loadingError && statistics?.totalCount === 0"
         class="empty-state"
       >
-        暂无公开作品，稍后再来看看。
+        <p>{{ isAdminPreview ? '暂无可预览的作品。' : '暂无公开作品。普通账号仅能查看公开内容。' }}</p>
+        <router-link v-if="!isAdminPreview" :to="{ name: 'Login', query: { switch: '1', redirect: '/timeline' } }">切换到管理员账号 ↗</router-link>
       </div>
 
       <!-- 主内容区 -->
@@ -1034,13 +1036,21 @@ watch(windowHeight, () => {
   position: absolute;
   inset: 0;
   display: flex;
+  flex-direction: column;
+  gap: 12px;
   align-items: center;
   justify-content: center;
   padding: 24px;
   color: var(--muted);
   font-size: 14px;
   text-align: center;
-  pointer-events: none;
+  z-index: 1;
+}
+.empty-state p {
+  margin: 0;
+}
+.empty-state a {
+  color: var(--accent);
 }
 
 /* 加载和错误状态 */

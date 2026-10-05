@@ -1,8 +1,9 @@
 import axios from 'axios'
+import { clearAuthSession } from './authSession'
 
 const request = axios.create({
   withCredentials: true,
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:9090',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/',
   timeout: 10000
 })
 
@@ -11,7 +12,7 @@ request.interceptors.request.use(
   (config) => {
     // 可加入 token
     const token = localStorage.getItem('token')
-    if (token) {
+    if (token && !['/api/auth/login', '/api/auth/admin-login', '/api/auth/register'].includes(config.url || '')) {
       config.headers.Authorization = `Bearer ${token}`
     }
     return config
@@ -26,8 +27,15 @@ request.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token')
-      window.location.href = '/login'
+      const loginRequest = ['/api/auth/login', '/api/auth/admin-login'].includes(error.config?.url || '')
+      const token = localStorage.getItem('token')
+      const currentAuthorization = token ? `Bearer ${token}` : ''
+      const requestAuthorization = error.config?.headers?.Authorization || ''
+      if (!loginRequest && requestAuthorization === currentAuthorization) {
+        clearAuthSession()
+        const query = new URLSearchParams({ redirect: window.location.pathname + window.location.search })
+        window.location.href = `/login?${query}`
+      }
     }
     console.error('API error', error)
     return Promise.reject(error)

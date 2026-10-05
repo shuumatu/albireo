@@ -15,6 +15,9 @@
         <p class="login-subtitle">
           {{ isRegister ? '创建新账号' : '用户登录' }}
         </p>
+        <p class="login-scope">
+          普通账号可浏览公开作品；管理员账号登录后可预览私有作品。
+        </p>
       </div>
 
       <n-form
@@ -107,6 +110,7 @@ import {
   LockClosedOutline as LockIcon
 } from '@vicons/ionicons5'
 import { login, register } from '../api/auth'
+import { saveAuthSession } from '../utils/authSession'
 import {
   saveCredential,
   loadCredential,
@@ -177,6 +181,7 @@ function toggleMode() {
 }
 
 async function handleSubmit() {
+  if (loading.value) return
   try {
     await formRef.value?.validate()
   } catch {
@@ -193,23 +198,21 @@ async function handleSubmit() {
       formData.confirmPassword = ''
     } else {
       const data = await login(formData.username, formData.password)
-      localStorage.setItem('token', data.token)
-      localStorage.setItem('userId', String(data.userId))
-      localStorage.setItem('username', data.username)
-      localStorage.setItem('role', data.role)
+      saveAuthSession(data)
       if (rememberMe.value) {
         await saveCredential(formData.username, formData.password)
       } else {
         clearCredential()
       }
       message.success('登录成功')
-      const redirect =
-        (router.currentRoute.value.query.redirect as string) || '/'
-      router.push(redirect)
+      const target = router.currentRoute.value.query.redirect
+      const redirect = typeof target === 'string' ? target : '/'
+      router.push(redirect.startsWith('/') && !redirect.startsWith('//') && !redirect.startsWith('/login') ? redirect : '/')
     }
   } catch (err: any) {
     const status = err.response?.status
-    const msg = err.response?.data
+    const body = err.response?.data
+    const msg = typeof body === 'string' ? body : body?.message
     if (status === 400) {
       message.error(
         typeof msg === 'string'
@@ -311,6 +314,12 @@ async function handleSubmit() {
 .footer-text {
   color: var(--muted);
   font-size: 13px;
+}
+.login-scope {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 12px 0 0;
 }
 .remember-row {
   margin-bottom: 12px;

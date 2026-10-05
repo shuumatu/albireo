@@ -3,7 +3,7 @@
     <video-player
       :poster="poster" :cross-origin="playback ? 'use-credentials' : undefined" :controls="true" :playback-rates="[0.5, 0.75, 1, 1.25, 1.5, 2]"
       :fluid="true" :aspect-ratio="aspectRatio" :picture-in-picture="true"
-      :html5="{ vhs: { withCredentials: true } }"
+      :html5="playerHtml5"
       class="video-js vjs-big-play-centered theme-archive"
       @mounted="handleMounted" @ready="handleReady"
     />
@@ -22,10 +22,11 @@ import type MenuItemType from 'video.js/dist/types/menu/menu-item'
 import type { VideoSource } from '../types/video'
 import type { VideoPlayback } from '../types/media'
 import { qualityChoices, variantFor, legacyQuality, defaultLegacy, type QualityKey } from '../utils/mediaQuality'
+import { browserBandwidthMemory, cappedPixelRatio, connectionInfo, DEFAULT_STARTUP_BANDWIDTH, mediaOrigin, networkFingerprint } from '../utils/playbackBandwidth'
+import { createQualityPolicy, type VhsHandler } from '../utils/vhsQualityPolicy'
+import { createPlaybackDiagnostics } from '../utils/playbackDiagnostics'
 import 'video.js/dist/video-js.css'
 
-type Representation = { id: string; width: number; height: number; enabled(value?: boolean): boolean }
-type Vhs = { representations(): Representation[] }
 type GalleryPlayer = Player & { controlBar: Component }
 type QualityButton = Component & { update(): void; updateButtonText(): void; items: Array<MenuItemType & { key: QualityKey }> }
 const props = withDefaults(defineProps<{ poster?: string; videoSources?: VideoSource[]; playback?: VideoPlayback }>(), { poster: '', videoSources: () => [] })
@@ -36,6 +37,24 @@ const actual = ref('')
 const switching = ref(false)
 const feedback = ref('')
 const unsupported = ref(new Set<string>())
+const playerHtml5 = { vhs: {
+  withCredentials: true,
+  useNetworkInformationApi: false,
+  useBandwidthFromLocalStorage: false,
+  limitRenditionByPlayerDimensions: true,
+  useDevicePixelRatio: true,
+  usePlayerObjectFit: true,
+  customPixelRatio: cappedPixelRatio(window.devicePixelRatio)
+} }
+const bandwidthMemory = browserBandwidthMemory()
+const qualityPolicy = createQualityPolicy()
+let diagnostics: ReturnType<typeof createPlaybackDiagnostics>
+let lastRecordedBytes = 0
+let skipNextMeasurement = false
+let activeOrigin: string | undefined
+let network = networkFingerprint()
+let frameRequest: number | undefined
+let frameVideo: HTMLVideoElement | undefined
 const aspectRatio = computed(() => {
   const source = variantFor(props.playback, 'source') || props.playback?.variants.find(v => v.available)
   // Keep tall videos visible without taking several screen heights.
@@ -55,8 +74,62 @@ const currentLabel = computed(() => {
   const label = qualityChoices.find(q => q.key === selection.value)?.label || '自动'
   return `${label}${selection.value === 'auto' && actual.value ? ` · ${actual.value}` : ''}${switching.value ? '…' : ''}`
 })
-function vhs(): Vhs | undefined {
-  return (player.value?.tech(true) as unknown as { vhs?: Vhs })?.vhs
+function vhs(): VhsHandler | undefined {
+  return (player.value?.tech(true) as unknown as { vhs?: VhsHandler })?.vhs
+}
+function bufferedAhead() {
+  const instance = player.value
+  if (!instance) return 0
+  const time = instance.currentTime() || 0, ranges = instance.buffered()
+  for (let i = 0; i < ranges.length; i++) if (ranges.start(i) <= time && ranges.end(i) >= time) return Math.max(0, ranges.end(i) - time)
+  return 0
+}
+function diagnose(event: string) {
+  const instance = player.value
+  if (!diagnostics || !instance) return
+  const handler = vhs()
+  diagnostics.sample({ event, time: instance.currentTime() || 0, bufferedSeconds: Math.round(bufferedAhead() * 10) / 10,
+    bandwidth: handler?.bandwidth, systemBandwidth: handler?.systemBandwidth,
+    width: instance.videoWidth(), height: instance.videoHeight(), selection: selection.value,
+    pixelRatio: handler?.customPixelRatio || cappedPixelRatio(window.devicePixelRatio) })
+}
+function rememberBandwidth() {
+  const handler = vhs(), bytes = handler?.stats?.mediaBytesTransferred || 0
+  if (!handler || !navigator.onLine) return
+  // VHS uses a tiny synthetic estimate after a timeout; do not retain a fast seed.
+  if (handler.bandwidth < 64_000) { bandwidthMemory.reset(); diagnose('bandwidth-timeout'); return }
+  if (bytes <= lastRecordedBytes) return
+  lastRecordedBytes = bytes
+  if (skipNextMeasurement) { skipNextMeasurement = false; return }
+  if (handler.bandwidth >= 64_000) bandwidthMemory.record(activeOrigin, network, handler.bandwidth)
+  else bandwidthMemory.reset()
+  diagnose('bandwidth')
+}
+function resetNetwork(event: Event) {
+  bandwidthMemory.reset()
+  const nextNetwork = networkFingerprint()
+  const resetEstimate = nextNetwork !== network || event.type === 'online' || event.type === 'offline'
+  network = nextNetwork
+  skipNextMeasurement = true // An in-flight old-network segment is not a new measurement.
+  const handler = vhs()
+  if (handler) {
+    lastRecordedBytes = handler.stats?.mediaBytesTransferred || 0
+    // downlink/rtt updates also emit change: invalidate startup memory without
+    // replacing a valid live segment measurement with a coarse network estimate.
+    if (resetEstimate) {
+      handler.bandwidth = DEFAULT_STARTUP_BANDWIDTH
+      if (selection.value === 'auto') qualityPolicy.reselect(handler)
+    }
+  }
+  diagnose(resetEstimate ? 'network-reset' : 'network-memory-reset')
+}
+function updatePixelRatio() {
+  const handler = vhs(), ratio = cappedPixelRatio(window.devicePixelRatio)
+  if (handler && handler.customPixelRatio !== ratio) {
+    handler.customPixelRatio = ratio
+    if (selection.value === 'auto') qualityPolicy.reselect(handler)
+    diagnose('pixel-ratio')
+  }
 }
 function unavailable(key: QualityKey): string {
   if (key === 'auto') return props.playback ? '' : '完成 HLS 升级后可自动选择'
@@ -98,18 +171,12 @@ function reportActual() {
 }
 function applyRepresentations(): boolean {
   const handler = vhs()
-  const representations = typeof handler?.representations === 'function' ? handler.representations() : []
-  if (!representations.length || !props.playback) return false
+  if (!handler || !props.playback) return false
   const target = selection.value === 'auto' ? undefined : variantFor(props.playback, selection.value)
-  const allowed = representations.filter(rep => {
+  return qualityPolicy.apply(handler, selection.value, rep => {
     const supported = props.playback!.variants.some(v => v.available && !unsupported.value.has(v.id) && v.width === rep.width && v.height === rep.height)
     return supported && (!target || (target.width === rep.width && target.height === rep.height))
   })
-  if (!allowed.length) return false
-  // Enable the destination before disabling others; VHS always has an eligible rendition.
-  allowed.forEach(rep => rep.enabled(true))
-  representations.filter(rep => !allowed.includes(rep)).forEach(rep => rep.enabled(false))
-  return true
 }
 function armTimeout() {
   clearTimeout(timeout)
@@ -132,6 +199,7 @@ function selectQuality(key: QualityKey, recovering = false) {
   generation++
   if (!recovering) feedback.value = ''
   selection.value = key
+  diagnose('quality-selection')
   recoveringSwitch = recovering
   switching.value = true
   updateMenu()
@@ -192,14 +260,26 @@ function syncSource() {
   const nextKey = props.playback?.masterUrl || props.videoSources.map(s => s.src).join('|')
   if (streamKey === nextKey) return
   streamKey = nextKey
+  qualityPolicy.reset()
+  diagnostics?.endWait()
+  diagnostics = createPlaybackDiagnostics()
+  activeOrigin = props.playback ? mediaOrigin(props.playback.masterUrl, location.href) : undefined
+  lastRecordedBytes = 0
+  network = networkFingerprint()
+  skipNextMeasurement = false
+  if (frameRequest !== undefined) frameVideo?.cancelVideoFrameCallback(frameRequest)
+  frameRequest = undefined; frameVideo = undefined
   clearPending(); generation++; sourceSnapshot = undefined; switching.value = false
   desiredPaused = true; feedback.value = ''; actual.value = ''; unsupported.value = new Set()
   selection.value = props.playback ? 'auto' : defaultLegacy(props.videoSources) as QualityKey
   lastSuccessful = selection.value
   updateMenu(true)
-  const source = props.playback ? { src: props.playback.masterUrl, type: 'application/x-mpegURL' }
+  const source = props.playback ? { src: props.playback.masterUrl, type: 'application/x-mpegURL',
+    bandwidth: bandwidthMemory.read(activeOrigin, network) || DEFAULT_STARTUP_BANDWIDTH,
+    customPixelRatio: cappedPixelRatio(window.devicePixelRatio) }
     : props.videoSources.find(s => legacyQuality(s) === selection.value)
   if (source?.src) { instance.src(source); instance.load() }
+  diagnose('source')
   void probeSupport()
 }
 async function probeSupport() {
@@ -271,27 +351,54 @@ function handleMounted({ player: instance }: { player: Player }) { player.value 
 function handleReady() {
   const instance = player.value
   if (!instance || cleanupEvents) return
-  const onPlay = () => { if (!sourceSnapshot) desiredPaused = false; armTimeout(); emit('playing') }
-  const onPause = () => { if (!sourceSnapshot) desiredPaused = true; clearTimeout(timeout); emit('pause') }
+  const onPlay = () => { if (!sourceSnapshot) desiredPaused = false; diagnostics?.play(); armTimeout(); emit('playing') }
+  const onPause = () => { if (!sourceSnapshot) desiredPaused = true; diagnostics?.endWait(); clearTimeout(timeout); emit('pause') }
+  const onPlaying = () => {
+    diagnostics?.endWait()
+    const video = instance.el().querySelector('video')
+    if (diagnostics && video && typeof video.requestVideoFrameCallback === 'function') {
+      if (frameRequest !== undefined) frameVideo?.cancelVideoFrameCallback(frameRequest)
+      frameVideo = video
+      frameRequest = video.requestVideoFrameCallback(() => { frameRequest = undefined; diagnostics?.firstFrame(); diagnose('playing-frame') })
+    } else { diagnostics?.firstFrame(); diagnose('playing') }
+  }
+  const onWaiting = () => { if (!instance.paused() && !instance.seeking() && !instance.ended()) { diagnostics?.waiting(); diagnose('waiting') } }
+  const onSeeking = () => diagnostics?.endWait()
   const onRepresentations = () => { applyRepresentations(); reportActual() }
+  const onResize = () => { reportActual(); diagnose('rendition') }
   const onError = () => {
     if (!sourceSnapshot && props.playback && selection.value !== 'auto') {
       showError('当前清晰度播放失败，已切回自动。'); selectQuality('auto', true)
     }
   }
   instance.on('play', onPlay); instance.on('pause', onPause)
+  instance.on('playing', onPlaying); instance.on('waiting', onWaiting); instance.on('seeking', onSeeking)
+  // VHS emits this custom event on Tech; Video.js does not forward it to Player.
+  const tech = instance.tech(true)
+  tech.on('bandwidthupdate', rememberBandwidth)
   instance.on('loadedmetadata', onRepresentations); instance.on('loadedplaylist', onRepresentations)
-  instance.on('timeupdate', reportActual); instance.on('resize', reportActual); instance.on('error', onError)
+  instance.on('timeupdate', reportActual); instance.on('resize', onResize); instance.on('error', onError)
+  const connection = connectionInfo()
+  connection?.addEventListener('change', resetNetwork)
+  window.addEventListener('online', resetNetwork); window.addEventListener('offline', resetNetwork)
+  window.addEventListener('resize', updatePixelRatio)
   cleanupEvents = () => {
     instance.off('play', onPlay); instance.off('pause', onPause)
     instance.off('loadedmetadata', onRepresentations); instance.off('loadedplaylist', onRepresentations)
-    instance.off('timeupdate', reportActual); instance.off('resize', reportActual); instance.off('error', onError)
+    instance.off('timeupdate', reportActual); instance.off('resize', onResize); instance.off('error', onError)
+    instance.off('playing', onPlaying); instance.off('waiting', onWaiting); instance.off('seeking', onSeeking)
+    tech.off('bandwidthupdate', rememberBandwidth)
+    connection?.removeEventListener('change', resetNetwork)
+    window.removeEventListener('online', resetNetwork); window.removeEventListener('offline', resetNetwork)
+    window.removeEventListener('resize', updatePixelRatio)
   }
   createQualityButton(instance); syncSource()
 }
 watch(() => [props.playback, props.videoSources], syncSource, { deep: true, flush: 'post' })
 onBeforeUnmount(() => {
   generation++; clearPending(); cleanupEvents?.(); qualityButton = undefined
+  qualityPolicy.dispose(); diagnostics?.endWait()
+  if (frameRequest !== undefined) frameVideo?.cancelVideoFrameCallback(frameRequest)
   if (player.value && !player.value.isDisposed()) player.value.dispose()
 })
 </script>

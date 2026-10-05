@@ -51,6 +51,8 @@
         <n-icon :component="NavigateOutline" :size="32" />
         <p>当前视口内没有内容</p>
         <p class="empty-hint">试试缩小地图或拖动到其它区域</p>
+        <p v-if="!isAdminPreview" class="empty-hint">普通账号仅显示公开且带坐标的作品</p>
+        <router-link v-if="!isAdminPreview" :to="{ name: 'Login', query: { switch: '1', redirect: '/map' } }">切换到管理员账号 ↗</router-link>
       </div>
       <n-scrollbar v-else class="entry-scroll">
         <ul class="entry-list">
@@ -112,6 +114,7 @@
 </template>
 
 <script setup lang="ts">
+import { isAdminPreview } from '../../utils/authSession'
 import type { MediaRendition } from '../../types/media'
 import MediaImage from '../../components/MediaImage.vue'
 

@@ -117,6 +117,7 @@ import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage, type FormInst, type FormRules } from 'naive-ui'
 import { changePassword } from '../api/auth'
+import { clearAuthSession } from '../utils/authSession'
 
 const router = useRouter()
 const message = useMessage()
@@ -154,10 +155,7 @@ const rules: FormRules = {
 }
 
 function handleLogout() {
-  localStorage.removeItem('token')
-  localStorage.removeItem('userId')
-  localStorage.removeItem('username')
-  localStorage.removeItem('role')
+  clearAuthSession()
   router.push('/login')
 }
 

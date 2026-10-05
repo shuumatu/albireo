@@ -65,7 +65,7 @@ test('HLS fixed menu, disabled upscale, shared aliases and rapid paused switchin
   expect(state.reps.find((r: any) => r.height === 480)?.enabled).toBe(false)
   await menu.hover()
   await choices.nth(0).click()
-  expect(await page.locator('.video-js').evaluate(el => (el as any).player.tech(true).vhs.representations().every((r: any) => r.enabled()))).toBe(true)
+  await expect.poll(() => page.locator('.video-js').evaluate(el => (el as any).player.tech(true).vhs.representations().every((r: any) => r.enabled()))).toBe(true)
   await video.evaluate(v => (v as HTMLVideoElement).play())
   await expect.poll(() => video.evaluate(v => (v as HTMLVideoElement).currentTime)).toBeGreaterThan(3.5)
 })

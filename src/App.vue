@@ -6,6 +6,7 @@ import { darkTheme } from 'naive-ui'
 import AppHeader from './components/AppHeader.vue'
 import SiteFooter from './components/SiteFooter.vue'
 import { archiveTheme } from './theme/archive'
+import { gallerySessionRevision } from './utils/authSession'
 const route = useRoute()
 const standalone = computed(
   () => route.meta.fullScreen || route.meta.hideLayout
@@ -27,7 +28,7 @@ const workspace = computed(
             :class="{ 'workspace-content': workspace }"
           >
             <router-view v-slot="{ Component }"
-              ><keep-alive include="TimeLine"
+              ><keep-alive include="TimeLine" :key="gallerySessionRevision"
                 ><component :is="Component" :key="route.path" /></keep-alive
             ></router-view>
           </main>

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { NDropdown } from 'naive-ui'
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { toRefs } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { authSession, clearAuthSession, isAdminPreview } from '../utils/authSession'
 const route = useRoute(),
   router = useRouter()
-const username = ref(''),
-  isLoggedIn = ref(false)
+const { username, isLoggedIn } = toRefs(authSession)
 const links = [
   { to: '/', label: '首页', en: 'INDEX' },
   { to: '/timeline', label: '时间线', en: 'TIMELINE' },
@@ -14,25 +14,17 @@ const links = [
 ]
 const userMenu = [
   { label: '个人中心', key: 'profile' },
+  { label: '切换账号', key: 'switch-account' },
   { label: '退出登录', key: 'logout' }
 ]
-function syncLoginState() {
-  isLoggedIn.value = Boolean(localStorage.getItem('token'))
-  username.value = localStorage.getItem('username') || ''
-}
 function selectUser(key: string) {
   if (key === 'profile') router.push('/profile')
+  else if (key === 'switch-account') router.push({ name: 'Login', query: { switch: '1', redirect: route.fullPath } })
   else {
-    ;['token', 'userId', 'username', 'role'].forEach((k) =>
-      localStorage.removeItem(k)
-    )
-    syncLoginState()
+    clearAuthSession()
     router.push('/login')
   }
 }
-watch(() => route.fullPath, syncLoginState, { immediate: true })
-onMounted(() => window.addEventListener('storage', syncLoginState))
-onBeforeUnmount(() => window.removeEventListener('storage', syncLoginState))
 </script>
 <template>
   <header class="site-header">
@@ -51,6 +43,7 @@ onBeforeUnmount(() => window.removeEventListener('storage', syncLoginState))
       >
     </nav>
     <div class="account">
+      <span v-if="isAdminPreview" class="preview-label" title="管理员可预览私有作品">管理员预览</span>
       <n-dropdown
         v-if="isLoggedIn"
         :options="userMenu"
@@ -155,8 +148,16 @@ nav a:hover {
   color: var(--accent);
 }
 .account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding-left: 25px;
   border-left: 1px solid var(--line);
+}
+.preview-label {
+  font-size: 11px;
+  color: var(--accent-warm);
+  white-space: nowrap;
 }
 .login-link,
 .account-button {

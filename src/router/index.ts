@@ -70,7 +70,7 @@ const router = createRouter({
 router.beforeEach((to, _from, next) => {
   const token = localStorage.getItem('token')
   if (to.meta.requiresAuth === false || to.name === 'Login') {
-    if (to.name === 'Login' && token) {
+    if (to.name === 'Login' && token && to.query.switch !== '1' && to.query.mode !== 'admin') {
       next({ path: '/' })
     } else {
       next()
