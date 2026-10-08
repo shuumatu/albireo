@@ -43,7 +43,7 @@
         <n-radio-button value="video">视频</n-radio-button>
       </n-radio-group>
       <span v-if="lastQuery && !loading" class="result-meta">
-        共 {{ results.length }} 条结果，关键词「{{ lastQuery }}」
+        展示最相关的 {{ results.length }} 条结果，关键词「{{ lastQuery }}」
       </span>
     </div>
 

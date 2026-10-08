@@ -10,7 +10,7 @@
         <n-h3 style="margin: 0; flex: 1 1 auto">{{ collection.name }}</n-h3>
         <n-tag size="small" :bordered="false" type="info">
           {{ collectionType === 'image' ? '图片合集' : '视频合集' }} · 共
-          {{ items.length }} 项
+          {{ total }} 项
         </n-tag>
       </n-flex>
       <n-text v-if="collection.description" depth="2">{{
@@ -69,6 +69,10 @@
         </div>
       </div>
     </div>
+    <n-space vertical style="margin-top: 20px" align="center">
+      <n-text v-if="pageError" type="error" role="alert">{{ pageError }}</n-text>
+      <n-button v-if="items.length < total" :loading="pageLoading" @click="loadMore">加载更多（{{ items.length }}/{{ total }}）</n-button>
+    </n-space>
   </n-card>
   <n-modal
     v-model:show="previewOpen"
@@ -89,7 +93,8 @@
 <script setup lang="ts">
 import MediaImage from '../../../components/MediaImage.vue'
 
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { getShareItems } from '../../../api/share'
 import ImageShareContent from './ImageShareContent.vue'
 import VideoShareContent from './VideoShareContent.vue'
 import {
@@ -101,7 +106,7 @@ import {
   NTag,
   NDivider,
   NEmpty,
-  NModal
+  NModal, NButton
 } from 'naive-ui'
 
 /**
@@ -114,6 +119,8 @@ import {
  */
 const props = defineProps<{
   content: any
+  shareCode: string
+  visitToken?: string
 }>()
 
 const selectedItem = ref<any>(null)
@@ -123,9 +130,29 @@ const collection = computed(() => {
   return props.content?.collection ?? props.content
 })
 
-const items = computed<any[]>(() => {
-  return Array.isArray(props.content?.items) ? props.content.items : []
-})
+const items = ref<any[]>([])
+const page = ref(1), total = ref(0), pageLoading = ref(false), pageError = ref('')
+let pageGeneration = 0
+watch(() => props.content, content => {
+  pageGeneration++
+  items.value = Array.isArray(content?.items) ? [...content.items] : []
+  page.value = content?.page || 1
+  total.value = content?.total ?? items.value.length
+  pageLoading.value = false; pageError.value = ''
+}, { immediate: true })
+async function loadMore() {
+  if (pageLoading.value || !props.visitToken) return
+  const generation = pageGeneration
+  pageLoading.value = true; pageError.value = ''
+  try {
+    const response = await getShareItems(props.shareCode, props.visitToken, page.value + 1, props.content.pageSize || 50)
+    if (generation !== pageGeneration) return
+    items.value = Array.from(new Map([...items.value, ...response.content.items].map(item => [item.id,item])).values())
+    page.value = response.content.page; total.value = response.content.total
+  } catch {
+    if (generation === pageGeneration) pageError.value = '加载失败，请重试；访问凭据过期时请刷新页面。'
+  } finally { if (generation === pageGeneration) pageLoading.value = false }
+}
 
 const collectionType = computed<'video' | 'image'>(() => {
   if (props.content?.collectionType) return props.content.collectionType

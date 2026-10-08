@@ -38,9 +38,10 @@
 
           <n-divider />
 
-          <n-button block type="error" secondary @click="handleLogout">
-            退出登录
+          <n-button block type="error" secondary @click="handleLogout(false)">
+            退出当前设备
           </n-button>
+          <n-button block secondary style="margin-top: 12px" @click="handleLogout(true)">退出全部设备</n-button>
         </n-card>
       </n-gi>
 
@@ -116,7 +117,7 @@ import {
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage, type FormInst, type FormRules } from 'naive-ui'
-import { changePassword } from '../api/auth'
+import { changePassword, logout } from '../api/auth'
 import { clearAuthSession } from '../utils/authSession'
 
 const router = useRouter()
@@ -154,7 +155,8 @@ const rules: FormRules = {
   ]
 }
 
-function handleLogout() {
+async function handleLogout(all = false) {
+  try { await logout(all) } catch { message.error("退出失败，请重试"); return }
   clearAuthSession()
   router.push('/login')
 }
@@ -174,7 +176,8 @@ async function handleChangePassword() {
     formData.newPassword = ''
     formData.confirmPassword = ''
     setTimeout(() => {
-      handleLogout()
+      clearAuthSession()
+      router.push("/login")
     }, 1500)
   } catch (err: any) {
     const status = err.response?.status

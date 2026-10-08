@@ -1038,7 +1038,9 @@ function onFullscreenChange() {
 
 // --- 簇内媒体 ---
 
+let clusterRequestGeneration = 0
 async function openClusterMedia(cluster: MapClusterVO) {
+  const generation = ++clusterRequestGeneration
   currentClusterId = cluster.clusterId
   currentClusterPage = 1
   clusterMediaList.value = []
@@ -1050,13 +1052,13 @@ async function openClusterMedia(cluster: MapClusterVO) {
   clusterLoading.value = true
   try {
     const res = await getClusterMedia(cluster.clusterId, 1, CLUSTER_PAGE_SIZE)
-    if (currentClusterId !== cluster.clusterId) return
+    if (generation !== clusterRequestGeneration) return
     clusterMediaList.value = res.data
     clusterMediaTotal.value = res.total
   } catch (e) {
     console.error('获取簇内媒体失败', e)
   } finally {
-    clusterLoading.value = false
+    if (generation === clusterRequestGeneration) clusterLoading.value = false
   }
 }
 
@@ -1064,19 +1066,22 @@ async function loadMoreClusterMedia() {
   if (clusterLoading.value) return
   if (clusterMediaList.value.length >= clusterMediaTotal.value) return
   const nextPage = currentClusterPage + 1
+  const generation = clusterRequestGeneration
+  const clusterId = currentClusterId
   clusterLoading.value = true
   try {
     const res = await getClusterMedia(
-      currentClusterId,
+      clusterId,
       nextPage,
       CLUSTER_PAGE_SIZE
     )
+    if (generation !== clusterRequestGeneration || clusterId !== currentClusterId) return
     currentClusterPage = nextPage
     clusterMediaList.value.push(...res.data)
   } catch (e) {
     console.error('加载更多失败', e)
   } finally {
-    clusterLoading.value = false
+    if (generation === clusterRequestGeneration) clusterLoading.value = false
   }
 }
 

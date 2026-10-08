@@ -29,14 +29,20 @@ test('HLS fixed menu, disabled upscale, shared aliases and rapid paused switchin
     return route.fulfill({ contentType: path.endsWith('.m3u8') ? 'application/vnd.apple.mpegurl' : 'video/mp4', body: readFileSync(join(fixture, path)) })
   })
   const original = { id: 'original', menuId: 'source', aliases: ['source', '720p'], label: '原画', available: true, width: 1280, height: 720, frameRate: 10, url: '/__hls/master.m3u8' }
-  await page.route('**/api/metadata/video/info/hls-test', route => route.fulfill({ json: {
-    title: 'HLS test', createdAt: '2026-10-04', playback: { masterUrl: '/__hls/master.m3u8', variants: [original,
+  let authorizations = 0
+  await page.route('**/__authorize/hls-test', route => {
+    authorizations++; expect(route.request().method()).toBe('POST')
+    return route.fulfill({ json: { masterUrl: '/__hls/master.m3u8', variants: [original,
       { ...original, menuId: '720p', label: '720p' },
       { id: '1080p', menuId: '1080p', label: '1080p', width: 1920, height: 1080, available: false, reason: '源分辨率不足' },
       { id: '480p', menuId: '480p', label: '480p', width: 854, height: 480, available: true, url: '/__hls/master.m3u8' }
-    ] }
+    ]
+  } }) })
+  await page.route('**/api/metadata/video/info/hls-test', route => route.fulfill({ json: {
+    title: 'HLS test', createdAt: '2026-10-04', playback: { authorizeUrl: '/__authorize/hls-test', masterUrl: '', variants: [] }
   } }))
   await page.goto('/video/hls-test')
+  await expect.poll(() => authorizations).toBe(1)
   const video = page.locator('video')
   await expect.poll(() => video.evaluate(v => (v as HTMLVideoElement).readyState)).toBeGreaterThanOrEqual(2)
   await video.evaluate(v => (v as HTMLVideoElement).play())

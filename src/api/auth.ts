@@ -18,3 +18,8 @@ export function register(username: string, password: string): Promise<void> {
 export function changePassword(oldPassword: string, newPassword: string): Promise<void> {
   return request.post('/api/auth/change-password', { oldPassword, newPassword })
 }
+
+export async function logout(all = false): Promise<void> {
+  try { await request.post(all ? "/api/auth/logout-all" : "/api/auth/logout") }
+  catch (e: any) { if (e?.response?.status !== 401) throw e }
+}

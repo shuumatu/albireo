@@ -24,6 +24,7 @@ export interface PlaybackVariant {
 }
 
 export interface VideoPlayback {
+  authorizeUrl?: string
   masterUrl: string
   variants: PlaybackVariant[]
 }

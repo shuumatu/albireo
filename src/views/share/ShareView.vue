@@ -95,6 +95,7 @@
         />
         <CollectionShareContent
           v-else-if="shareData.targetType === 'collection'"
+          :share-code="shareData.shareCode" :visit-token="shareData.visitToken"
           :content="shareData.content"
         />
       </main>
@@ -194,6 +195,7 @@ onMounted(async () => {
 })
 
 async function submitPassword() {
+  if (submitting.value) return
   if (!passwordInput.value) {
     passwordError.value = '请输入密码'
     return

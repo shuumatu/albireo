@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { NDropdown } from 'naive-ui'
+import { NDropdown, useMessage } from 'naive-ui'
 import { toRefs } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { authSession, clearAuthSession, isAdminPreview } from '../utils/authSession'
+import { logout } from '../api/auth'
+const message = useMessage()
 const route = useRoute(),
   router = useRouter()
 const { username, isLoggedIn } = toRefs(authSession)
@@ -17,10 +19,11 @@ const userMenu = [
   { label: '切换账号', key: 'switch-account' },
   { label: '退出登录', key: 'logout' }
 ]
-function selectUser(key: string) {
+async function selectUser(key: string) {
   if (key === 'profile') router.push('/profile')
   else if (key === 'switch-account') router.push({ name: 'Login', query: { switch: '1', redirect: route.fullPath } })
   else {
+    try { await logout() } catch { message.error("退出失败，请重试"); return }
     clearAuthSession()
     router.push('/login')
   }

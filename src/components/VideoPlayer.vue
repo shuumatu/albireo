@@ -1,7 +1,9 @@
 <template>
   <div class="video-player-container" tabindex="0" @keydown="handleKeydown" @click.capture="captureIntent">
-    <video-player
-      :poster="poster" :cross-origin="playback ? 'use-credentials' : undefined" :controls="true" :playback-rates="[0.5, 0.75, 1, 1.25, 1.5, 2]"
+    <p v-if="authorizationError" role="alert">{{ authorizationError }} <button @click="authorizePlayback">重试</button></p>
+    <p v-else-if="authorizing" role="status">正在准备播放…</p>
+    <video-player v-else
+      :poster="poster" :cross-origin="resolvedPlayback ? 'use-credentials' : undefined" :controls="true" :playback-rates="[0.5, 0.75, 1, 1.25, 1.5, 2]"
       :fluid="true" :aspect-ratio="aspectRatio" :picture-in-picture="true"
       :html5="playerHtml5"
       class="video-js vjs-big-play-centered theme-archive"
@@ -31,6 +33,25 @@ type GalleryPlayer = Player & { controlBar: Component }
 type QualityButton = Component & { update(): void; updateButtonText(): void; items: Array<MenuItemType & { key: QualityKey }> }
 const props = withDefaults(defineProps<{ poster?: string; videoSources?: VideoSource[]; playback?: VideoPlayback }>(), { poster: '', videoSources: () => [] })
 const emit = defineEmits<{ playing: []; pause: []; qualitySwitchError: [message: string] }>()
+const resolvedPlayback = shallowRef<VideoPlayback | undefined>()
+const authorizing = ref(false), authorizationError = ref('')
+let authorization: AbortController | undefined
+async function authorizePlayback() {
+  authorization?.abort()
+  const controller = new AbortController(); authorization = controller
+  authorizationError.value = ''
+  if (!props.playback?.authorizeUrl) { resolvedPlayback.value = props.playback; authorizing.value = false; return }
+  authorizing.value = true; resolvedPlayback.value = undefined
+  try {
+    const response = await fetch(props.playback.authorizeUrl, { method: 'POST', credentials: 'include', signal: controller.signal })
+    if (!response.ok) throw new Error('播放授权失败，请重试；分享过期时请刷新页面。')
+    const playback: VideoPlayback = await response.json()
+    if (!controller.signal.aborted) resolvedPlayback.value = playback
+  } catch (error) {
+    if (!controller.signal.aborted) authorizationError.value = error instanceof Error ? error.message : '播放加载失败'
+  } finally { if (!controller.signal.aborted) authorizing.value = false }
+}
+onBeforeUnmount(() => authorization?.abort())
 const player = shallowRef<GalleryPlayer | null>(null)
 const selection = ref<QualityKey>('auto')
 const actual = ref('')
@@ -56,7 +77,7 @@ let network = networkFingerprint()
 let frameRequest: number | undefined
 let frameVideo: HTMLVideoElement | undefined
 const aspectRatio = computed(() => {
-  const source = variantFor(props.playback, 'source') || props.playback?.variants.find(v => v.available)
+  const source = variantFor(resolvedPlayback.value, 'source') || resolvedPlayback.value?.variants.find(v => v.available)
   // Give tall videos some room around the picture and controls.
   return source?.width && source.height ? `${Math.round(Math.max(source.width / source.height, 0.7) * 1000)}:1000` : '16:9'
 })
@@ -136,9 +157,9 @@ function updatePixelRatio() {
   }
 }
 function unavailable(key: QualityKey): string {
-  if (key === 'auto') return props.playback ? '' : '完成 HLS 升级后可自动选择'
-  if (!props.playback) return props.videoSources.some(s => legacyQuality(s) === key) ? '' : '此档暂不可用'
-  const variant = variantFor(props.playback, key)
+  if (key === 'auto') return resolvedPlayback.value ? '' : '完成 HLS 升级后可自动选择'
+  if (!resolvedPlayback.value) return props.videoSources.some(s => legacyQuality(s) === key) ? '' : '此档暂不可用'
+  const variant = variantFor(resolvedPlayback.value, key)
   if (!variant?.available) return variant?.reason || '源分辨率不足或尚未生成'
   if (unsupported.value.has(variant.id)) return '当前设备无法解码'
   return ''
@@ -167,18 +188,18 @@ function reportActual() {
   const instance = player.value
   if (!instance) return
   const width = instance.videoWidth(), height = instance.videoHeight()
-  const variant = props.playback?.variants.find(v => v.available && v.width === width && v.height === height)
+  const variant = resolvedPlayback.value?.variants.find(v => v.available && v.width === width && v.height === height)
   actual.value = variant?.label || (height ? `${Math.min(width, height)}p` : '')
-  const target = variantFor(props.playback, selection.value)
+  const target = variantFor(resolvedPlayback.value, selection.value)
   if (switching.value && !sourceSnapshot && (selection.value === 'auto' || (target?.width === width && target.height === height))) finishSwitch()
   updateMenu()
 }
 function applyRepresentations(): boolean {
   const handler = vhs()
-  if (!handler || !props.playback) return false
-  const target = selection.value === 'auto' ? undefined : variantFor(props.playback, selection.value)
+  if (!handler || !resolvedPlayback.value) return false
+  const target = selection.value === 'auto' ? undefined : variantFor(resolvedPlayback.value, selection.value)
   return qualityPolicy.apply(handler, selection.value, rep => {
-    const supported = props.playback!.variants.some(v => v.available && !unsupported.value.has(v.id) && v.width === rep.width && v.height === rep.height)
+    const supported = resolvedPlayback.value!.variants.some(v => v.available && !unsupported.value.has(v.id) && v.width === rep.width && v.height === rep.height)
     return supported && (!target || (target.width === rep.width && target.height === rep.height))
   })
 }
@@ -191,7 +212,7 @@ function armTimeout() {
       clearPending(); sourceSnapshot = undefined; switching.value = false
       showError('视频加载超时，请检查连接后重新打开。'); updateMenu(); return
     }
-    const fallback = props.playback ? 'auto' : lastSuccessful
+    const fallback = resolvedPlayback.value ? 'auto' : lastSuccessful
     showError('清晰度切换超时，已恢复可用档位。')
     selectQuality(fallback, true)
   }, 45000)
@@ -207,15 +228,15 @@ function selectQuality(key: QualityKey, recovering = false) {
   recoveringSwitch = recovering
   switching.value = true
   updateMenu()
-  if (props.playback && vhs() && !instance.error()) {
+  if (resolvedPlayback.value && vhs() && !instance.error()) {
     applyRepresentations()
     reportActual()
     armTimeout()
     return
   }
   // Safari native HLS receives a single-variant master including shared audio.
-  const source = props.playback
-    ? { src: key === 'auto' ? props.playback.masterUrl : variantFor(props.playback, key)?.url, type: 'application/x-mpegURL' }
+  const source = resolvedPlayback.value
+    ? { src: key === 'auto' ? resolvedPlayback.value.masterUrl : variantFor(resolvedPlayback.value, key)?.url, type: 'application/x-mpegURL' }
     : props.videoSources.find(s => legacyQuality(s) === key)
   if (!source?.src) { switching.value = false; showError('此清晰度暂不可用。'); return }
   if (instance.currentSrc() === source.src && !sourceSnapshot) { finishSwitch(); return }
@@ -243,7 +264,7 @@ function selectQuality(key: QualityKey, recovering = false) {
     clearPending()
     switching.value = false
     showError(recovering ? '视频加载失败，请检查连接后重新打开。' : '该档加载失败，正在恢复可用档位。')
-    if (!recovering) selectQuality(props.playback ? 'auto' : lastSuccessful, true)
+    if (!recovering) selectQuality(resolvedPlayback.value ? 'auto' : lastSuccessful, true)
     else sourceSnapshot = undefined
   }
   instance.on('loadedmetadata', onMetadata)
@@ -260,14 +281,14 @@ function selectQuality(key: QualityKey, recovering = false) {
 }
 function syncSource() {
   const instance = player.value
-  if (!instance || !cleanupEvents) return
-  const nextKey = props.playback?.masterUrl || props.videoSources.map(s => s.src).join('|')
+  if (!instance || instance.isDisposed() || !cleanupEvents) return
+  const nextKey = resolvedPlayback.value?.masterUrl || props.videoSources.map(s => s.src).join('|')
   if (streamKey === nextKey) return
   streamKey = nextKey
   qualityPolicy.reset()
   diagnostics?.endWait()
   diagnostics = createPlaybackDiagnostics()
-  activeOrigin = props.playback ? mediaOrigin(props.playback.masterUrl, location.href) : undefined
+  activeOrigin = resolvedPlayback.value ? mediaOrigin(resolvedPlayback.value.masterUrl, location.href) : undefined
   lastRecordedBytes = 0
   network = networkFingerprint()
   skipNextMeasurement = false
@@ -275,10 +296,10 @@ function syncSource() {
   frameRequest = undefined; frameVideo = undefined
   clearPending(); generation++; sourceSnapshot = undefined; switching.value = false
   desiredPaused = true; feedback.value = ''; actual.value = ''; unsupported.value = new Set()
-  selection.value = props.playback ? 'auto' : defaultLegacy(props.videoSources) as QualityKey
+  selection.value = resolvedPlayback.value ? 'auto' : defaultLegacy(props.videoSources) as QualityKey
   lastSuccessful = selection.value
   updateMenu(true)
-  const source = props.playback ? { src: props.playback.masterUrl, type: 'application/x-mpegURL',
+  const source = resolvedPlayback.value ? { src: resolvedPlayback.value.masterUrl, type: 'application/x-mpegURL',
     bandwidth: bandwidthMemory.read(activeOrigin, network) || DEFAULT_STARTUP_BANDWIDTH,
     customPixelRatio: cappedPixelRatio(window.devicePixelRatio) }
     : props.videoSources.find(s => legacyQuality(s) === selection.value)
@@ -287,7 +308,7 @@ function syncSource() {
   void probeSupport()
 }
 async function probeSupport() {
-  const playback = props.playback
+  const playback = resolvedPlayback.value
   if (!playback || !navigator.mediaCapabilities?.decodingInfo) return
   const rejected = new Set<string>()
   await Promise.all(playback.variants.filter(v => v.available && v.codecs).map(async v => {
@@ -299,7 +320,7 @@ async function probeSupport() {
       if (!result.supported) rejected.add(v.id)
     } catch { /* Unknown codecs stay available; normal player error handling remains active. */ }
   }))
-  if (props.playback !== playback) return
+  if (resolvedPlayback.value !== playback) return
   unsupported.value = rejected
   if (selection.value !== 'auto' && unavailable(selection.value)) {
     showError('当前设备无法解码该清晰度，已切回自动。')
@@ -351,7 +372,12 @@ function handleKeydown(event: KeyboardEvent) {
     event.preventDefault(); instance.currentTime(Math.max(0, (instance.currentTime() || 0) + (event.code === 'ArrowLeft' ? -3 : 3)))
   }
 }
-function handleMounted({ player: instance }: { player: Player }) { player.value = instance as GalleryPlayer }
+function handleMounted({ player: instance }: { player: Player }) {
+  clearPending(); cleanupEvents?.(); cleanupEvents = undefined
+  if (frameRequest !== undefined) frameVideo?.cancelVideoFrameCallback(frameRequest)
+  frameRequest = undefined; frameVideo = undefined; qualityButton = undefined
+  streamKey = ''; generation++; player.value = instance as GalleryPlayer
+}
 function handleReady() {
   const instance = player.value
   if (!instance || cleanupEvents) return
@@ -371,7 +397,7 @@ function handleReady() {
   const onRepresentations = () => { applyRepresentations(); reportActual() }
   const onResize = () => { reportActual(); diagnose('rendition') }
   const onError = () => {
-    if (!sourceSnapshot && props.playback && selection.value !== 'auto') {
+    if (!sourceSnapshot && resolvedPlayback.value && selection.value !== 'auto') {
       showError('当前清晰度播放失败，已切回自动。'); selectQuality('auto', true)
     }
   }
@@ -398,13 +424,14 @@ function handleReady() {
   }
   createQualityButton(instance); syncSource()
 }
-watch(() => [props.playback, props.videoSources], syncSource, { deep: true, flush: 'post' })
+watch(() => [resolvedPlayback.value, props.videoSources], syncSource, { deep: true, flush: 'post' })
 onBeforeUnmount(() => {
   generation++; clearPending(); cleanupEvents?.(); qualityButton = undefined
   qualityPolicy.dispose(); diagnostics?.endWait()
   if (frameRequest !== undefined) frameVideo?.cancelVideoFrameCallback(frameRequest)
   if (player.value && !player.value.isDisposed()) player.value.dispose()
 })
+watch(() => props.playback, authorizePlayback, { immediate: true })
 </script>
 
 <style>
