@@ -1,0 +1,15 @@
+/* Hide native bars only after a working DOM replacement has been installed. */
+[data-albireo-scrollable] { scrollbar-width: none !important; }
+[data-albireo-scrollable]::-webkit-scrollbar { width: 0 !important; height: 0 !important; }
+.albireo-scrollbars { position: fixed; inset: 0; pointer-events: none; z-index: 2147483646; }
+.albireo-scrollbar { position: absolute; pointer-events: auto; touch-action: none; user-select: none; background: #192332b8; border-radius: 6px; }
+.albireo-scrollbar[hidden] { display: none; }
+.albireo-scrollbar.is-horizontal { cursor: ew-resize; }
+.albireo-scrollbar.is-vertical { cursor: ns-resize; }
+.albireo-scrollbar-thumb { position: absolute; border: 3px solid transparent; border-radius: 6px; background: #80b5f4b3; background-clip: padding-box; }
+.is-horizontal > .albireo-scrollbar-thumb { height: 100%; }
+.is-vertical > .albireo-scrollbar-thumb { width: 100%; }
+.albireo-scrollbar:hover > .albireo-scrollbar-thumb,
+.albireo-scrollbar:focus-visible > .albireo-scrollbar-thumb,
+.albireo-scrollbar.is-dragging > .albireo-scrollbar-thumb { background-color: var(--star-gold, #e8bc72); }
+.albireo-scrollbar:focus-visible { outline: 2px solid var(--star-blue, #80b5f4); outline-offset: -2px; }

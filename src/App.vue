@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router'
 import { darkTheme } from 'naive-ui'
 import AppHeader from './components/AppHeader.vue'
 import SiteFooter from './components/SiteFooter.vue'
+import AlbireoCursor from './components/AlbireoCursor.vue'
 import { archiveTheme } from './theme/archive'
 import { gallerySessionRevision } from './utils/authSession'
 const route = useRoute()
@@ -16,6 +17,7 @@ const workspace = computed(
 )
 </script>
 <template>
+  <AlbireoCursor />
   <n-config-provider :theme="darkTheme" :theme-overrides="archiveTheme">
     <n-message-provider
       ><n-dialog-provider>

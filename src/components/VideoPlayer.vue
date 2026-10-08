@@ -57,8 +57,12 @@ let frameRequest: number | undefined
 let frameVideo: HTMLVideoElement | undefined
 const aspectRatio = computed(() => {
   const source = variantFor(props.playback, 'source') || props.playback?.variants.find(v => v.available)
-  // Keep tall videos visible without taking several screen heights.
+  // Give tall videos some room around the picture and controls.
   return source?.width && source.height ? `${Math.round(Math.max(source.width / source.height, 0.7) * 1000)}:1000` : '16:9'
+})
+const fluidPadding = computed(() => {
+  const [width, height] = aspectRatio.value.split(':').map(Number)
+  return `${height! / width! * 100}%`
 })
 let qualityButton: QualityButton | undefined
 let cleanupSwitch: (() => void) | undefined
@@ -416,6 +420,11 @@ onBeforeUnmount(() => {
 /* Preserve media aspect ratio, with contain for tall videos. */
 .video-player-container .video-js {
   background: #000;
+}
+/* Fluid mode sizes the player with padding, so cap that instead of max-height. */
+.video-player-container .video-js.vjs-fluid:not(.vjs-fullscreen) {
+  padding-top: min(v-bind(fluidPadding), 70vh);
+  padding-top: min(v-bind(fluidPadding), 70svh);
 }
 .video-player-container .video-js .vjs-tech,
 .video-player-container .video-js video {

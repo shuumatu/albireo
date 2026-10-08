@@ -13,6 +13,7 @@ import { onBeforeRouteLeave } from 'vue-router'
 import { layoutTimeline } from '../utils/timelineLayout'
 import type { MediaRendition } from '../types/media'
 import TimelineMedia from '../components/TimelineMedia.vue'
+import TimelineScrubber from '../components/TimelineScrubber.vue'
 import { isAdminPreview } from '../utils/authSession'
 defineOptions({ name: 'TimeLine' })
 import {
@@ -41,22 +42,9 @@ interface TimeGroup {
   day: number
   title: string
   photos: Photo[]
-  height: number
   isLoaded: boolean
   isLoading: boolean
   estimatedCount?: number // 新增：该月预估的照片数量
-}
-
-interface TimelineSegment {
-  year: number
-  month: number
-  day: number
-  count: number
-  height: number
-  dateFormatted: string
-  hasLabel: boolean
-  hasDot: boolean
-  hasYearLine?: boolean
 }
 
 // Props
@@ -75,15 +63,10 @@ const flowWidth = ref(800)
 const imageDimensions = ref(
   new Map<string, { width: number; height: number }>()
 )
-const scrollBar = ref<HTMLElement>()
-const isHover = ref(false)
-const isDragging = ref(false)
-const hoverY = ref(0)
-const scrollY = ref(0)
-const windowHeight = ref(window.innerHeight)
-const activeSegment = ref<HTMLElement>()
-const scrollPercent = ref(0)
-const segmentsKey = ref(0)
+const isScrubbing = ref(false)
+const selectedDateKey = ref('')
+const activeTimelineMonth = ref('')
+const timelineEndSpace = ref(0)
 
 // 数据加载状态
 const statistics = ref<TimelineStatistics | null>(null)
@@ -104,11 +87,7 @@ const mediaDetailRoute = (photo: Photo) => {
 }
 
 // 常量
-const PADDING_TOP = 32
-const PADDING_BOTTOM = 10
-const MIN_YEAR_LABEL_DISTANCE = 80
 const LOAD_THRESHOLD = 1000
-const ESTIMATED_HEIGHT_PER_PHOTO = 34 // 估算每张照片占据的高度（200px高度 + 4px间距，考虑多列排列）
 
 // 格式化日期标题
 const formatDateTitle = (year: number, month: number, day: number): string => {
@@ -149,8 +128,6 @@ const handleImageLoad = (img: HTMLImageElement, photo: Photo) => {
     })
     nextTick(() => {
       restoreScrollAnchor(anchor)
-      updateGroupHeights()
-      segmentsKey.value++
     })
   }
 }
@@ -179,7 +156,6 @@ const generateMonthPlaceholders = (): TimeGroup[] => {
       day: 15, // 使用月份中间的日期作为占位
       title: `${year}年${month}月`,
       photos: [],
-      height: Math.max(200, count * ESTIMATED_HEIGHT_PER_PHOTO), // 根据照片数量估算高度
       isLoaded: false,
       isLoading: pendingBuckets.value.has(`${year}-${month}`),
       estimatedCount: count
@@ -219,7 +195,6 @@ const timeGroups = computed((): TimeGroup[] => {
           day,
           title: formatDateTitle(year, month, day),
           photos,
-          height: 0,
           isLoaded: true,
           isLoading: false
         }
@@ -276,7 +251,6 @@ const timeGroups = computed((): TimeGroup[] => {
                 mediaType: p.mediaType
               }
             }),
-            height: 0,
             isLoaded: true,
             isLoading: false
           })
@@ -331,15 +305,6 @@ const loadBucketData = async (year: number, month: number) => {
     loadedBuckets.value.set(bucketKey, bucket)
     await nextTick()
     restoreScrollAnchor(anchor)
-
-    // 触发重新计算
-    segmentsKey.value++
-
-    // 等待 DOM 更新后重新计算高度
-    setTimeout(() => {
-      updateGroupHeights()
-      segmentsKey.value++
-    }, 100)
   } catch (error) {
     failedBuckets.value.add(bucketKey)
     console.error(`加载 ${year}-${month} 数据失败:`, error)
@@ -395,14 +360,9 @@ const initializeTimeline = async () => {
 
     statistics.value = await getTimelineStatistics()
 
-    // 触发重新计算
-    segmentsKey.value++
-
     // 等待 DOM 更新
     setTimeout(() => {
-      updateGroupHeights()
       checkAndLoadVisibleBuckets()
-      segmentsKey.value++
     }, 100)
   } catch (error) {
     console.error('加载时间轴统计数据失败:', error)
@@ -412,273 +372,34 @@ const initializeTimeline = async () => {
   }
 }
 
-// 计算时间轴片段
-const calculateSegments = (): TimelineSegment[] => {
-  if (!scrollBar.value) return []
-
-  const scrollBarHeight = scrollBar.value.clientHeight
-  const availableHeight = scrollBarHeight - (PADDING_TOP + PADDING_BOTTOM)
-
-  const totalContentHeight = timeGroups.value.reduce(
-    (sum, group) => sum + (group.height || 0),
-    0
-  )
-
-  // 如果没有高度信息，使用估算高度
-  if (totalContentHeight === 0) {
-    const segments: TimelineSegment[] = []
-    let lastYear = -1
-    let lastMonthKey = ''
-    let verticalSpanWithoutLabel = 0
-    let previousLabeledSegment: TimelineSegment | undefined
-
-    timeGroups.value.forEach((group, index) => {
-      const estimatedHeight =
-        group.height ||
-        Math.max(200, (group.estimatedCount || 6) * ESTIMATED_HEIGHT_PER_PHOTO)
-      const segmentHeight =
-        (estimatedHeight /
-          timeGroups.value.reduce(
-            (sum, g) =>
-              sum +
-              Math.max(
-                200,
-                (g.estimatedCount || 6) * ESTIMATED_HEIGHT_PER_PHOTO
-              ),
-            0
-          )) *
-        availableHeight
-
-      const currentMonthKey = `${group.year}-${group.month}`
-      const isNewMonth = currentMonthKey !== lastMonthKey
-      const isNewYear = group.year !== lastYear
-
-      const segment: TimelineSegment = {
-        year: group.year,
-        month: group.month,
-        day: group.day,
-        count: group.estimatedCount || group.photos.length,
-        height: segmentHeight,
-        dateFormatted: group.title,
-        hasLabel: false,
-        hasDot: isNewMonth,
-        hasYearLine: false
-      }
-      const isFirstSegment = index === 0
-      // 年份标签和年份线逻辑
-      if (isNewYear) {
-        segment.hasYearLine = true
-
-        if (
-          isFirstSegment ||
-          !previousLabeledSegment ||
-          verticalSpanWithoutLabel > MIN_YEAR_LABEL_DISTANCE
-        ) {
-          segment.hasLabel = true
-          previousLabeledSegment = segment
-          verticalSpanWithoutLabel = 0
-        }
-      }
-
-      verticalSpanWithoutLabel += segmentHeight
-      lastYear = group.year
-      lastMonthKey = currentMonthKey
-      segments.push(segment)
-    })
-
-    return segments
-  }
-
-  // 使用实际高度计算
-  let verticalSpanWithoutLabel = 0
-  let segments: TimelineSegment[] = []
-  let previousLabeledSegment: TimelineSegment | undefined
-  let lastMonthKey = ''
-  let lastYear = -1
-
-  timeGroups.value.forEach((group, index) => {
-    const groupHeight = group.height || 0
-    if (groupHeight === 0) return // 跳过没有高度的组
-
-    const contentPercentage = groupHeight / totalContentHeight
-    const segmentHeight = contentPercentage * availableHeight
-
-    const currentMonthKey = `${group.year}-${group.month}`
-    const isNewMonth = currentMonthKey !== lastMonthKey
-    const isNewYear = group.year !== lastYear
-
-    const segment: TimelineSegment = {
-      year: group.year,
-      month: group.month,
-      day: group.day,
-      count: group.photos.length || group.estimatedCount || 0,
-      height: segmentHeight,
-      dateFormatted: group.title,
-      hasLabel: false,
-      hasDot: isNewMonth,
-      hasYearLine: false
-    }
-    const isFirstSegment = index === 0
-    // 年份标签和年份线逻辑
-    if (isNewYear) {
-      segment.hasYearLine = true
-
-      if (
-        isFirstSegment ||
-        !previousLabeledSegment ||
-        verticalSpanWithoutLabel > MIN_YEAR_LABEL_DISTANCE
-      ) {
-        segment.hasLabel = true
-        previousLabeledSegment = segment
-        verticalSpanWithoutLabel = 0
-      }
-    }
-
-    verticalSpanWithoutLabel += segmentHeight
-    lastYear = group.year
-    lastMonthKey = currentMonthKey
-    segments.push(segment)
-  })
-
-  return segments
-}
-
-const segments = computed(() => {
-  windowHeight.value
-  segmentsKey.value
-  return calculateSegments()
+// Keep the date rail aware of both data changes and photo row repacking.
+const scrubberEntries = computed(() => {
+  // Repacking may move dates even when the overall flow height stays unchanged.
+  layoutRows.value
+  return timeGroups.value.map(group => ({
+    key: groupKey(group),
+    year: group.year,
+    month: group.month,
+    title: group.title,
+    count: group.estimatedCount ?? group.photos.length,
+    loaded: group.isLoaded
+  }))
 })
-
-const hoverLabel = computed(() => {
-  return activeSegment.value?.dataset.label || ''
-})
-
-// 处理主内容滚动
-const handleScroll = () => {
-  if (!mainContent.value || isDragging.value) return
-  const element = mainContent.value
-  const scrollTop = element.scrollTop
-  const scrollHeight = element.scrollHeight
-  const clientHeight = element.clientHeight
-  const maxScroll = scrollHeight - clientHeight
-  const percent = maxScroll > 0 ? scrollTop / maxScroll : 0
-  scrollPercent.value = percent
-
-  const scrollBarHeight = scrollBar.value?.clientHeight || 0
-  const availableHeight = scrollBarHeight - (PADDING_TOP + PADDING_BOTTOM)
-  scrollY.value = percent * availableHeight
-
-  checkAndLoadVisibleBuckets()
+const handleScroll = () => checkAndLoadVisibleBuckets()
+function seekTimelineDate(year: number, month: number) {
+  requestedMonth = ''
+  void loadBucketData(year, month)
 }
-
-// 处理鼠标移动
-const handleMouseMove = (event: MouseEvent) => {
-  if (!scrollBar.value || !isHover.value) return
-  const rect = scrollBar.value.getBoundingClientRect()
-  const y = Math.max(
-    0,
-    Math.min(
-      event.clientY - rect.top - PADDING_TOP,
-      rect.height - (PADDING_TOP + PADDING_BOTTOM)
-    )
-  )
-  hoverY.value = y
-  const x = rect.left + rect.width / 2
-  const elements = document.elementsFromPoint(x, event.clientY)
-  const segment = elements.find(
-    (el) => el instanceof HTMLElement && el.dataset.id === 'time-segment'
-  ) as HTMLElement | undefined
-  activeSegment.value = segment
-}
-
-// 处理鼠标按下
-const handleMouseDown = () => {
-  if (isHover.value && activeSegment.value) {
-    const label = activeSegment.value.dataset.label
-    if (label) {
-      const targetGroup = timeGroups.value.find(
-        (group) => group.title === label
-      )
-      if (targetGroup) {
-        const key = `${targetGroup.year}-${targetGroup.month}-${targetGroup.day}`
-        const element = document.querySelector(`[data-group="${key}"]`)
-        if (element && mainContent.value) {
-          const elementTop = (element as HTMLElement).offsetTop
-          mainContent.value.scrollTo({
-            top: elementTop - 20,
-            behavior: window.matchMedia('(prefers-reduced-motion: reduce)')
-              .matches
-              ? 'auto'
-              : 'smooth'
-          })
-        }
-      }
-    }
-    isDragging.value = true
+function releaseTimelineSelection() {
+  requestedMonth = ''
+  if (selectedDateKey.value && mainContent.value) {
+    // Stop the date animation before handing scrolling back to the user.
+    mainContent.value.scrollTo({ top: mainContent.value.scrollTop, behavior: 'auto' })
   }
+  selectedDateKey.value = ''
 }
-
-// 处理拖拽滚动
-const handleMouseDrag = (event: MouseEvent) => {
-  if (!isDragging.value || !scrollBar.value || !mainContent.value) return
-  const rect = scrollBar.value.getBoundingClientRect()
-  const y = Math.max(
-    0,
-    Math.min(
-      event.clientY - rect.top - PADDING_TOP,
-      rect.height - (PADDING_TOP + PADDING_BOTTOM)
-    )
-  )
-  hoverY.value = y
-  const x = rect.left + rect.width / 2
-  const elements = document.elementsFromPoint(x, event.clientY)
-  const segment = elements.find(
-    (el) => el instanceof HTMLElement && el.dataset.id === 'time-segment'
-  ) as HTMLElement | undefined
-  if (segment && segment !== activeSegment.value) {
-    activeSegment.value = segment
-    const label = segment.dataset.label
-    if (label) {
-      const targetGroup = timeGroups.value.find(
-        (group) => group.title === label
-      )
-      if (targetGroup) {
-        const key = `${targetGroup.year}-${targetGroup.month}-${targetGroup.day}`
-        const element = document.querySelector(`[data-group="${key}"]`)
-        if (element) {
-          const elementTop = (element as HTMLElement).offsetTop
-          mainContent.value.scrollTop = elementTop - 20
-        }
-      }
-    }
-  }
-}
-
-const handleMouseUp = () => {
-  isDragging.value = false
-}
-
-// 更新分组高度
-const updateGroupHeights = () => {
-  if (!photoFlow.value) return
-  const heights = new Map<string, number>()
-  const rows = [
-    ...photoFlow.value.querySelectorAll<HTMLElement>('.timeline-row')
-  ]
-  rows.forEach((row, index) => {
-    const fragments = [...row.querySelectorAll<HTMLElement>('[data-group]')]
-    const height =
-      ((rows[index + 1]?.offsetTop ?? row.offsetTop + row.offsetHeight) -
-        row.offsetTop) /
-      Math.max(1, fragments.length)
-    fragments.forEach((fragment) => {
-      const key = fragment.dataset.group!
-      heights.set(key, (heights.get(key) ?? 0) + height)
-    })
-  })
-  timeGroups.value.forEach((group) => {
-    group.height = heights.get(groupKey(group)) ?? 0
-  })
+function updateCurrentTimelineMonth(year: number, month: number) {
+  activeTimelineMonth.value = `${year}-${month}`
 }
 
 // 缓存页面时保留滚动位置，并在离开时释放全局监听。
@@ -695,21 +416,19 @@ function captureScrollAnchor() {
     ? {
         key: group.dataset.group!,
         fragment: group.dataset.fragment!,
-        offset: root.scrollTop - group.offsetTop
+        offset: root.scrollTop - group.offsetTop,
+        atEnd: root.scrollTop > 0 && root.scrollHeight - root.clientHeight - root.scrollTop < 1
       }
     : null
 }
 function restoreScrollAnchor(anchor: ReturnType<typeof captureScrollAnchor>) {
   const root = mainContent.value
-  if (!root) return
-  if (requestedMonth) {
-    const target = root.querySelector<HTMLElement>(
-      `[data-group^="${requestedMonth}-"]`
-    )
-    if (target) root.scrollTop = target.offsetTop - 20
-    return
-  }
+  if (!root || isScrubbing.value || selectedDateKey.value) return
   if (anchor) {
+    if (anchor.atEnd) {
+      root.scrollTop = root.scrollHeight - root.clientHeight
+      return
+    }
     const target =
       root.querySelector<HTMLElement>(`[data-fragment="${anchor.fragment}"]`) ??
       root.querySelector<HTMLElement>(`[data-group="${anchor.key}"]`)
@@ -721,10 +440,7 @@ onBeforeRouteLeave(() => {
   savedAnchor = captureScrollAnchor()
 })
 const handleResize = () => {
-  windowHeight.value = window.innerHeight
   nextTick(() => {
-    updateGroupHeights()
-    segmentsKey.value++
     handleScroll()
   })
 }
@@ -735,8 +451,6 @@ const measureFlow = () => {
   flowWidth.value = photoFlow.value.clientWidth
   nextTick(() => {
     restoreScrollAnchor(anchor)
-    updateGroupHeights()
-    segmentsKey.value++
   })
 }
 const flowObserver = new ResizeObserver(measureFlow)
@@ -759,7 +473,7 @@ onActivated(async () => {
 onDeactivated(() => {
   window.removeEventListener('resize', handleResize)
   flowObserver.disconnect()
-  isDragging.value = false
+  isScrubbing.value = false
   requestedMonth = ''
 })
 onUnmounted(() => {
@@ -776,40 +490,26 @@ async function jumpToMonth(event: Event) {
     .split('-')
     .map(Number)
   if (!year || !month) return
+  releaseTimelineSelection()
   requestedMonth = `${year}-${month}`
   await loadBucketData(year, month)
   await nextTick()
-  const target = mainContent.value?.querySelector<HTMLElement>(
-    `[data-group^="${year}-${month}-"]`
-  )
-  if (target)
-    mainContent.value?.scrollTo({
-      top: target.offsetTop - 20,
-      behavior: 'auto'
-    })
+  if (requestedMonth !== `${year}-${month}`) return
+  const group = timeGroups.value.find(group => group.year === year && group.month === month)
+  requestedMonth = ''
+  if (group) selectedDateKey.value = groupKey(group)
 }
 
 watch(
   timeGroups,
   () => {
     setTimeout(() => {
-      updateGroupHeights()
       handleScroll()
-      segmentsKey.value++
     }, 100)
   },
   { deep: true }
 )
 
-watch(windowHeight, () => {
-  setTimeout(() => {
-    updateGroupHeights()
-    if (mainContent.value) {
-      handleScroll()
-    }
-    segmentsKey.value++
-  }, 50)
-})
 </script>
 
 <template>
@@ -819,7 +519,7 @@ watch(windowHeight, () => {
         时间线 <span v-if="statistics">{{ statistics.totalCount }} 项</span>
       </h1>
       <label v-if="monthOptions.length" class="month-jump"
-        ><select aria-label="跳转到月份" @change="jumpToMonth">
+        ><select aria-label="跳转到月份" :value="activeTimelineMonth" @change="jumpToMonth">
           <option value="">选择月份</option>
           <option
             v-for="m in monthOptions"
@@ -832,12 +532,7 @@ watch(windowHeight, () => {
         </select></label
       >
     </header>
-    <div
-      class="photo-timeline-container"
-      @mousemove="handleMouseMove"
-      @mousedown="handleMouseDown"
-      @mouseup="handleMouseUp"
-    >
+    <div class="photo-timeline-container">
       <!-- 加载中提示 -->
       <div v-if="isInitializing" class="loading-overlay">
         <div class="loading-spinner"></div>
@@ -862,10 +557,11 @@ watch(windowHeight, () => {
       <div
         ref="mainContent"
         class="main-content"
+        :class="{ 'is-date-seeking': selectedDateKey }"
         @scroll.passive="handleScroll"
-        @wheel.passive="requestedMonth = ''"
-        @touchstart.passive="requestedMonth = ''"
-        @keydown="requestedMonth = ''"
+        @wheel.passive="releaseTimelineSelection"
+        @touchstart.passive="releaseTimelineSelection"
+        @keydown="releaseTimelineSelection"
       >
         <div ref="photoFlow" class="photo-flow-container">
           <div
@@ -882,7 +578,8 @@ watch(windowHeight, () => {
               :style="{ width: `${width}px` }"
               :class="{
                 'is-loading': group.isLoading,
-                'is-placeholder': !group.isLoaded
+                'is-placeholder': !group.isLoaded,
+                'is-time-selected': selectedDateKey === groupKey(group)
               }"
             >
               <!-- 日期标题行 -->
@@ -970,55 +667,19 @@ watch(windowHeight, () => {
             </div>
           </div>
         </div>
+        <div class="timeline-end-space" :style="{ height: `${timelineEndSpace}px` }" aria-hidden="true" />
       </div>
 
-      <!-- 时间轴滚动条 -->
-      <div
+      <TimelineScrubber
         v-if="timeGroups.length > 0"
-        ref="scrollBar"
-        class="scrubber"
-        :class="{ 'is-dragging': isDragging }"
-        :style="{
-          paddingTop: PADDING_TOP + 'px',
-          paddingBottom: PADDING_BOTTOM + 'px'
-        }"
-        @mouseenter="isHover = true"
-        @mouseleave="isHover = false"
-        @mousemove="handleMouseDrag"
-      >
-        <!-- 悬停标签 -->
-        <div
-          v-if="hoverLabel && (isHover || isDragging)"
-          class="hover-label"
-          :class="{ 'is-dragging': isDragging }"
-          :style="{ top: hoverY + 2 + 'px' }"
-        >
-          {{ hoverLabel }}
-        </div>
-
-        <!-- 滚动位置指示器 -->
-        <div
-          v-if="!isDragging"
-          class="scroll-indicator"
-          :style="{ top: scrollY + PADDING_TOP - 2 + 'px' }"
-        />
-
-        <!-- 时间片段 -->
-        <div
-          v-for="segment in segments"
-          :key="`${segment.year}-${segment.month}-${segment.day}`"
-          class="time-segment"
-          :data-id="'time-segment'"
-          :data-label="segment.dateFormatted"
-          :style="{ height: segment.height + 'px' }"
-        >
-          <div v-if="segment.hasYearLine" class="year-line" />
-          <div v-if="segment.hasLabel" class="year-label">
-            {{ segment.year }}
-          </div>
-          <div v-if="segment.hasDot" class="month-dot" />
-        </div>
-      </div>
+        v-model:selected-key="selectedDateKey"
+        :scroller="mainContent"
+        :entries="scrubberEntries"
+        @seek="seekTimelineDate"
+        @end-space="timelineEndSpace = $event"
+        @current-date="updateCurrentTimelineMonth"
+        @dragging="isScrubbing = $event"
+      />
     </div>
   </section>
 </template>
@@ -1223,95 +884,6 @@ watch(windowHeight, () => {
   opacity: 0.85;
 }
 
-.scrubber {
-  position: absolute;
-  right: 0;
-  top: 0;
-  width: 60px;
-  height: 95%;
-  background: transparent;
-  cursor: ns-resize;
-  user-select: none;
-  z-index: 100;
-}
-
-.scrubber.is-dragging {
-  width: 100vw;
-  background: rgba(0, 0, 0, 0.5);
-}
-
-.hover-label {
-  position: absolute;
-  right: 0;
-  min-width: 100px;
-  max-width: 200px;
-  width: fit-content;
-  background: rgba(255, 255, 255, 0.95);
-  border: 2px solid var(--accent);
-  border-radius: 6px 0 0 6px;
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-  z-index: 1;
-  pointer-events: none;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: #000;
-}
-
-.hover-label.is-dragging {
-  border-radius: 6px 0 6px 6px;
-  border-bottom: 2px solid var(--accent);
-}
-
-.scroll-indicator {
-  position: absolute;
-  right: 0;
-  height: 2px;
-  width: 40px;
-  background: var(--accent);
-  box-shadow: 0 0 6px rgba(0, 122, 255, 0.6);
-  z-index: 2;
-}
-
-.time-segment {
-  position: relative;
-}
-
-.year-label {
-  position: absolute;
-  right: 16px;
-  top: 0;
-  font-size: 11px;
-  color: var(--accent-warm);
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue',
-    sans-serif;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-}
-
-.month-dot {
-  position: absolute;
-  right: 10px;
-  top: 3px;
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-
-.year-line {
-  position: absolute;
-  right: 0;
-  top: 0;
-  width: 50px;
-  height: 0;
-  border-top: 1px dashed rgba(255, 255, 255, 0.6);
-}
-
 @media (max-width: 1024px) {
   .main-content {
     padding: 20px 50px 40px 15px;
@@ -1324,9 +896,6 @@ watch(windowHeight, () => {
   }
   .photo-grid {
     gap: 3px;
-  }
-  .scrubber {
-    width: 40px;
   }
   .date-title {
     font-size: 13px;
@@ -1386,7 +955,7 @@ watch(windowHeight, () => {
 .main-content {
   position: relative;
   min-width: 0;
-  padding: 8px 68px 24px 16px;
+  padding: 8px 20px 24px 16px;
   scroll-behavior: auto;
 }
 .photo-flow-container {
@@ -1424,6 +993,20 @@ watch(windowHeight, () => {
   font-size: 12px;
   color: var(--text);
 }
+.is-time-selected .date-title {
+  color: var(--accent);
+}
+.is-time-selected .date-header {
+  box-shadow: inset 2px 0 var(--accent);
+  padding-left: 8px;
+}
+.is-date-seeking {
+  overflow-anchor: none;
+}
+.timeline-end-space {
+  width: 100%;
+  pointer-events: none;
+}
 .photo-grid {
   flex-wrap: nowrap;
   gap: 4px;
@@ -1447,15 +1030,6 @@ watch(windowHeight, () => {
   color: var(--accent-ink);
   min-height: 44px;
 }
-.scroll-indicator {
-  box-shadow: none;
-}
-.hover-label,
-.hover-label.is-dragging {
-  border-radius: 0;
-  background: var(--surface);
-  color: var(--text);
-}
 @media (max-width: 700px) {
   .timeline-heading {
     padding: 0 12px;
@@ -1468,7 +1042,7 @@ watch(windowHeight, () => {
     min-width: 0;
   }
   .main-content {
-    padding: 6px 42px 20px 10px;
+    padding: 6px 10px 20px 10px;
   }
   .photo-item {
     flex: 0 0 auto;
