@@ -4,6 +4,7 @@ import { toRefs } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { authSession, clearAuthSession, isAdminPreview } from '../utils/authSession'
 import { logout } from '../api/auth'
+import ThemeToggle from './ThemeToggle.vue'
 const message = useMessage()
 const route = useRoute(),
   router = useRouter()
@@ -45,26 +46,29 @@ async function selectUser(key: string) {
         ><small>{{ link.en }}</small></router-link
       >
     </nav>
-    <div class="account">
-      <span v-if="isAdminPreview" class="preview-label" title="管理员可预览私有作品">管理员预览</span>
-      <n-dropdown
-        v-if="isLoggedIn"
-        :options="userMenu"
-        trigger="click"
-        @select="selectUser"
-        ><button class="account-button" :aria-label="`${username}，账户菜单`">
-          <span class="avatar">{{
-            username.charAt(0).toUpperCase() || 'U'
-          }}</span
-          ><span class="username">{{ username }}</span
-          ><span aria-hidden="true">⌄</span>
-        </button></n-dropdown
-      ><router-link
-        v-else
-        class="login-link"
-        :to="{ name: 'Login', query: { redirect: route.fullPath } }"
-        >登录 <span aria-hidden="true">↗</span></router-link
-      >
+    <div class="header-actions">
+      <ThemeToggle />
+      <div class="account">
+        <span v-if="isAdminPreview" class="preview-label" title="管理员可预览私有作品">管理员预览</span>
+        <n-dropdown
+          v-if="isLoggedIn"
+          :options="userMenu"
+          trigger="click"
+          @select="selectUser"
+          ><button class="account-button" :aria-label="`${username}，账户菜单`">
+            <span class="avatar">{{
+              username.charAt(0).toUpperCase() || 'U'
+            }}</span
+            ><span class="username">{{ username }}</span
+            ><span aria-hidden="true">⌄</span>
+          </button></n-dropdown
+        ><router-link
+          v-else
+          class="login-link"
+          :to="{ name: 'Login', query: { redirect: route.fullPath } }"
+          >登录 <span aria-hidden="true">↗</span></router-link
+        >
+      </div>
     </div>
   </header>
 </template>
@@ -74,7 +78,7 @@ async function selectUser(key: string) {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 40px;
+  gap: 28px;
   padding: 0 4.5%;
   border-bottom: 1px solid var(--line);
   background: var(--bg);
@@ -154,8 +158,14 @@ nav a:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-left: 25px;
+  padding-left: 18px;
   border-left: 1px solid var(--line);
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-shrink: 0;
 }
 .preview-label {
   font-size: 11px;
@@ -187,23 +197,53 @@ nav a:hover {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+@media (max-width: 1200px) {
+  .preview-label {
+    display: none;
+  }
+}
 @media (max-width: 1000px) {
   .site-header {
-    gap: 20px;
+    gap: 16px;
   }
   nav {
-    gap: 20px;
+    gap: 16px;
+  }
+  .brand {
+    font-size: 21px;
+    gap: 9px;
+    letter-spacing: 2px;
+  }
+  .brand small {
+    letter-spacing: 1px;
   }
   .username {
     display: none;
   }
   .account {
-    padding-left: 15px;
+    padding-left: 12px;
+  }
+  .header-actions {
+    gap: 12px;
+  }
+  .preview-label {
+    display: none;
+  }
+}
+@media (min-width: 701px) and (max-width: 850px) {
+  nav {
+    gap: 12px;
+  }
+  nav a {
+    min-width: 48px;
+  }
+  .brand-mark {
+    font-size: 32px;
   }
 }
 @media (max-width: 700px) {
   .site-header {
-    padding: 14px 24px 0;
+    padding: 14px 20px 0;
     flex-wrap: wrap;
     gap: 8px;
     align-content: space-between;
@@ -217,11 +257,21 @@ nav a:hover {
   .brand small {
     font-size: 7px;
   }
-  .account {
+  .header-actions {
     margin-left: auto;
+    gap: 12px;
+    order: 1;
+  }
+  .account {
     padding-left: 0;
     border: 0;
-    order: 1;
+  }
+  .account-button {
+    gap: 5px;
+    padding: 0;
+  }
+  .login-link {
+    gap: 4px;
   }
   nav {
     order: 2;
@@ -237,6 +287,27 @@ nav a:hover {
   }
   nav small {
     font-size: 9px;
+  }
+}
+@media (max-width: 400px) {
+  .site-header {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+  .brand {
+    font-size: 17px;
+    letter-spacing: 1.5px;
+    gap: 6px;
+  }
+  .brand-mark {
+    font-size: 27px;
+  }
+  .brand small {
+    font-size: 6px;
+    letter-spacing: 0.6px;
+  }
+  .header-actions {
+    gap: 8px;
   }
 }
 </style>

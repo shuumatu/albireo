@@ -45,3 +45,50 @@ export const archiveTheme: GlobalThemeOverrides = {
   Input: { borderRadius: '2px', caretColor: '#80b5f4' },
   Card: { borderRadius: '2px' }
 }
+
+export const archiveLightTheme: GlobalThemeOverrides = {
+  common: {
+    ...archiveTheme.common,
+    primaryColor: '#315f92',
+    primaryColorHover: '#244d79',
+    primaryColorPressed: '#234c79',
+    primaryColorSuppl: '#315f92',
+    bodyColor: '#f7f5ef',
+    cardColor: '#fffdf8',
+    modalColor: '#fffdf8',
+    popoverColor: '#fffdf8',
+    inputColor: '#fffdf8',
+    tableColor: '#fffdf8',
+    borderColor: '#cecfc8',
+    dividerColor: '#cecfc8',
+    textColorBase: '#233247',
+    textColor1: '#233247',
+    textColor2: '#46576b',
+    textColor3: '#59697a',
+    placeholderColor: '#6a7785',
+    successColor: '#267454',
+    infoColor: '#315f92',
+    warningColor: '#8a5f26',
+    errorColor: '#b3414a'
+  },
+  Button: {
+    colorPrimary: '#8a5f26',
+    colorHoverPrimary: '#71491a',
+    colorPressedPrimary: '#624018',
+    colorFocusPrimary: '#71491a',
+    colorDisabledPrimary: '#8a5f26',
+    borderPrimary: '1px solid #8a5f26',
+    borderHoverPrimary: '1px solid #71491a',
+    borderPressedPrimary: '1px solid #624018',
+    borderFocusPrimary: '1px solid #71491a',
+    borderDisabledPrimary: '1px solid #8a5f26',
+    textColorPrimary: '#fffdf8',
+    textColorHoverPrimary: '#fffdf8',
+    textColorPressedPrimary: '#fffdf8',
+    textColorFocusPrimary: '#fffdf8',
+    textColorDisabledPrimary: '#fffdf8',
+    borderRadiusMedium: '2px'
+  },
+  Input: { borderRadius: '2px', caretColor: '#315f92' },
+  Card: { borderRadius: '2px' }
+}

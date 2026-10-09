@@ -286,7 +286,7 @@ onBeforeUnmount(() => {
   bottom: 0;
   left: 8%;
   font-size: 12px;
-  background: #10151fdc;
+  background: var(--surface, #192332);
   padding: 6px 12px;
   color: var(--text, #e7eef5);
 }

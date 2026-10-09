@@ -24,6 +24,20 @@
   --paper-muted: #586476;
   --paper-blue: #2c6097;
   --paper-gold: #80591d;
+  --collection-bg: #151e2b;
+  --collection-surface: #1c2839;
+  --collection-raised: #25344a;
+  --collection-line: #34445a;
+  --danger: #ef8a8a;
+  --danger-soft: rgba(239, 138, 138, 0.1);
+  --shadow-panel: 0 8px 28px rgb(0 0 0 / 18%);
+  --scrollbar-track: #192332b8;
+  --scrollbar-thumb: #80b5f4b3;
+  /* Text and accents placed over photographs keep their own contrast. */
+  --on-photo: #f1eee6;
+  --on-photo-muted: #c3cddd;
+  --on-photo-gold: #f4d8a3;
+  --on-photo-blue: #abcdf8;
   --header-height: 88px;
   --mono: 'Cascadia Code', Consolas, monospace;
   color-scheme: dark;
@@ -31,6 +45,33 @@
   background: var(--bg);
   color: var(--text);
   font-synthesis: none;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+  --star-gold: #8a5f26;
+  --star-gold-bright: #71491a;
+  --star-gold-pressed: #624018;
+  --star-gold-soft: rgba(138, 95, 38, 0.1);
+  --star-blue: #315f92;
+  --star-blue-bright: #244d79;
+  --star-blue-strong: #234c79;
+  --star-blue-soft: rgba(49, 95, 146, 0.09);
+  --bg: #f7f5ef;
+  --surface: #fffdf8;
+  --surface-raised: #eeeae0;
+  --text: #233247;
+  --muted: #59697a;
+  --line: #cecfc8;
+  --accent-ink: #fffdf8;
+  --collection-bg: #f0eadc;
+  --collection-surface: #f9f5eb;
+  --collection-raised: #e8e2d6;
+  --collection-line: #c9c5bb;
+  --danger: #b3414a;
+  --danger-soft: rgba(179, 65, 74, 0.08);
+  --shadow-panel: 0 8px 28px rgb(35 50 71 / 7%);
+  --scrollbar-track: #e7e3d9b8;
+  --scrollbar-thumb: #315f929e;
 }
 * {
   box-sizing: border-box;
@@ -44,6 +85,7 @@ body,
 }
 body {
   background: var(--bg);
+  color: var(--text);
 }
 a {
   color: inherit;

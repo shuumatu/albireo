@@ -726,14 +726,14 @@ watch(
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.9);
+  background: var(--bg);
   z-index: 1000;
 }
 
 .loading-spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid rgba(255, 255, 255, 0.1);
+  border: 3px solid var(--line);
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -801,11 +801,11 @@ watch(
 
 .date-header {
   grid-row: 1;
-  background: rgba(0, 0, 0, 0.85);
+  background: var(--surface);
   backdrop-filter: blur(20px);
   padding: 10px 12px;
   margin-bottom: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--line);
   white-space: nowrap;
   display: flex;
   align-items: center;
@@ -815,7 +815,7 @@ watch(
 .date-title {
   font-size: 14px;
   font-weight: 600;
-  color: #fff;
+  color: var(--text);
   letter-spacing: 0.5px;
 }
 
@@ -848,7 +848,7 @@ watch(
 
 .placeholder-item {
   flex: 0 0 auto;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface);
   border-radius: 0;
   width: 200px;
   height: 200px;

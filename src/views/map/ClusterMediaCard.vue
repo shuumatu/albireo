@@ -86,7 +86,7 @@ function retryPreview() {
 
 .cluster-drawer .media-item:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 18px rgb(0 0 0 / 35%);
+  box-shadow: var(--map-shadow-md);
   z-index: 2;
 }
 

@@ -6,9 +6,11 @@ import { darkTheme } from 'naive-ui'
 import AppHeader from './components/AppHeader.vue'
 import SiteFooter from './components/SiteFooter.vue'
 import AlbireoCursor from './components/AlbireoCursor.vue'
-import { archiveTheme } from './theme/archive'
+import { archiveTheme, archiveLightTheme } from './theme/archive'
+import { useTheme } from './composables/useTheme'
 import { gallerySessionRevision } from './utils/authSession'
 const route = useRoute()
+const { isDark } = useTheme()
 const standalone = computed(
   () => route.meta.fullScreen || route.meta.hideLayout
 )
@@ -18,7 +20,10 @@ const workspace = computed(
 </script>
 <template>
   <AlbireoCursor />
-  <n-config-provider :theme="darkTheme" :theme-overrides="archiveTheme">
+  <n-config-provider
+    :theme="isDark ? darkTheme : null"
+    :theme-overrides="isDark ? archiveTheme : archiveLightTheme"
+  >
     <n-message-provider
       ><n-dialog-provider>
         <div class="site-shell" :class="{ 'workspace-shell': workspace }">

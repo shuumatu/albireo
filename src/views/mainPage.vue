@@ -144,19 +144,13 @@ onMounted(() => {
 </template>
 <style scoped>
 .selected-area {
-  background: var(--paper);
-  color: var(--paper-ink);
+  background: var(--collection-bg);
+  color: var(--text);
   padding: 64px 8% 56px;
   scroll-margin-top: 24px;
-  --text: var(--paper-ink);
-  --muted: var(--paper-muted);
-  --surface: #e5e0d5;
-  --surface-raised: #e0e5ea;
-  --line: #b3b7ba;
-  --accent: var(--paper-blue);
-  --accent-warm: var(--paper-gold);
-  --accent-soft: rgba(44, 96, 151, 0.1);
-  --accent-warm-soft: rgba(128, 89, 29, 0.1);
+  --surface: var(--collection-surface);
+  --surface-raised: var(--collection-raised);
+  --line: var(--collection-line);
 }
 .selected-area:focus {
   outline: none;
@@ -203,7 +197,7 @@ p {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border: 1px solid #2c609740;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
   border-radius: 50%;
   color: var(--accent);
   margin-right: 16px;
@@ -213,7 +207,7 @@ p {
   content: '';
   position: absolute;
   inset: 9px;
-  border: 1px solid #80591d80;
+  border: 1px solid color-mix(in srgb, var(--accent-warm) 50%, transparent);
   border-left-color: transparent;
   border-right-color: transparent;
   border-radius: 50%;

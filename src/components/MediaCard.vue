@@ -157,7 +157,7 @@ function onImageError() {
   background: #10151fcc;
   display: grid;
   place-items: center;
-  color: var(--star-blue-bright);
+  color: var(--on-photo-blue);
 }
 .play-icon {
   font-size: 12px;

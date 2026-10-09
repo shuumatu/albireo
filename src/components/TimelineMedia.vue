@@ -162,7 +162,7 @@ onUnmounted(() => { generation++; suspend() })
       <span v-if="isVideo" class="video-indicator" aria-hidden="true">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
           <circle cx="12" cy="12" r="10" fill="rgba(0,0,0,0.6)" />
-          <path d="M10 8L16 12L10 16V8Z" fill="var(--star-blue)" />
+          <path d="M10 8L16 12L10 16V8Z" fill="var(--on-photo-blue)" />
         </svg>
       </span>
     </router-link>

@@ -124,6 +124,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { NIcon } from 'naive-ui'
+import { useTheme } from '../../composables/useTheme'
 import {
   VideocamOutline,
   ImageOutline,
@@ -165,6 +166,7 @@ defineExpose({
 const trackRef = ref<HTMLDivElement | null>(null)
 const densityCanvas = ref<HTMLCanvasElement | null>(null)
 const collapsed = ref(false)
+const { currentTheme } = useTheme()
 const MIN_RANGE = 0.01
 function keyRange(event: KeyboardEvent, edge: 'start' | 'end') {
   if (
@@ -465,6 +467,7 @@ watch(
   () => nextTick(drawDensity)
 )
 watch(collapsed, () => nextTick(drawDensity))
+watch(currentTheme, () => nextTick(drawDensity), { flush: 'post' })
 
 onMounted(() => {
   nextTick(drawDensity)
@@ -718,7 +721,7 @@ function formatDateFull(ts: number): string {
   transform: translateX(-50%);
   background: var(--map-accent);
   border-radius: 1px;
-  box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--map-shadow-sm);
   transition:
     width 0.15s ease,
     background 0.15s ease,
@@ -735,7 +738,7 @@ function formatDateFull(ts: number): string {
   background: var(--map-accent);
   border-radius: 4px;
   border: 2px solid var(--map-glass-bg-strong);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--map-shadow-sm);
   transition:
     transform 0.15s ease,
     box-shadow 0.15s ease;
@@ -745,7 +748,7 @@ function formatDateFull(ts: number): string {
 .timeline-handle:active .handle-grip {
   transform: translate(-50%, -50%) scale(1.12);
   box-shadow:
-    0 3px 10px rgba(0, 0, 0, 0.55),
+    var(--map-shadow-md),
     0 0 0 4px var(--map-accent-soft);
 }
 
@@ -826,7 +829,7 @@ function formatDateFull(ts: number): string {
   white-space: nowrap;
   z-index: 9999;
   border: 1px solid var(--map-glass-border-strong);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--map-shadow-lg);
   display: flex;
   flex-direction: column;
   align-items: center;

@@ -3,7 +3,10 @@
     <!-- 顶栏 -->
     <header class="share-topbar">
       <router-link class="brand-name" to="/">ALBIREO ／</router-link>
-      <n-text depth="3" class="topbar-tag">SHARED ARCHIVE</n-text>
+      <div class="share-topbar-actions">
+        <n-text depth="3" class="topbar-tag">SHARED ARCHIVE</n-text>
+        <ThemeToggle />
+      </div>
     </header>
 
     <!-- 加载状态 -->
@@ -127,6 +130,7 @@ import type { ShareAccessVO } from '../../api/share'
 import VideoShareContent from './components/VideoShareContent.vue'
 import ImageShareContent from './components/ImageShareContent.vue'
 import CollectionShareContent from './components/CollectionShareContent.vue'
+import ThemeToggle from '../../components/ThemeToggle.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -228,6 +232,12 @@ async function submitPassword() {
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--line);
+  gap: 16px;
+}
+.share-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 24px;
 }
 .brand-name {
   font: 700 20px var(--mono);
@@ -294,7 +304,7 @@ async function submitPassword() {
   line-height: 1.8;
 }
 .password-error {
-  color: #ec969a;
+  color: var(--danger);
   text-align: left;
   margin: 0;
 }
@@ -331,7 +341,7 @@ async function submitPassword() {
     font-size: 16px;
   }
   .topbar-tag {
-    font-size: 8px;
+    display: none;
   }
   .share-content-wrapper {
     padding: 32px 20px;

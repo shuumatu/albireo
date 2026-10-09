@@ -135,7 +135,7 @@ const tripRoute = computed(() => {
 .trip-month {
   font-size: 22px;
   letter-spacing: 1px;
-  color: var(--star-gold-bright);
+  color: var(--on-photo-gold);
 }
 .trip-date-range {
   font: 11px var(--mono);
@@ -162,7 +162,7 @@ const tripRoute = computed(() => {
   position: absolute;
   top: 12px;
   right: 14px;
-  color: var(--star-blue-bright);
+  color: var(--on-photo-blue);
   font-size: 20px;
   text-shadow: 0 1px 6px #000;
 }

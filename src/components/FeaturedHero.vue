@@ -86,6 +86,9 @@ function explore(event: MouseEvent) {
 }
 .hero-bottom {
   position: absolute;
+  color: var(--on-photo);
+  --accent: var(--on-photo-blue);
+  --accent-warm: var(--on-photo-gold);
 }
 .mono {
   font-family: var(--mono);
@@ -132,7 +135,7 @@ function explore(event: MouseEvent) {
   text-shadow: 0 1px 8px #0008;
 }
 .hero-caption > .mono {
-  color: var(--star-gold-bright);
+  color: var(--on-photo-gold);
 }
 .hero-bottom h2 {
   margin: 9px 0 8px;
@@ -237,7 +240,7 @@ function explore(event: MouseEvent) {
   height: 24px;
   background: linear-gradient(
     90deg,
-    var(--star-gold) 0 2px,
+    var(--on-photo-gold) 0 2px,
     transparent 2px 5px,
     var(--accent) 5px
   );
@@ -344,6 +347,16 @@ function explore(event: MouseEvent) {
   }
   .frame-count .frame-total {
     font-size: 11px;
+  }
+}
+@container (max-width:400px) {
+  .slide-controls button {
+    flex-basis: 36px;
+    width: 36px;
+  }
+  .hero-bottom .frame-count {
+    font-size: 32px;
+    gap: 6px;
   }
 }
 </style>

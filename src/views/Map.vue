@@ -37,7 +37,7 @@
         <LayerSwitcher
           :base-layers="layerOptions"
           :active-layer="activeLayer"
-          @switch="switchLayer"
+          @switch="selectLayer"
         />
       </div>
 
@@ -136,6 +136,7 @@ import { getMapAggregation, getClusterMedia } from '../api/map'
 import type { MapPointVO, MapClusterVO } from '../api/map'
 import { gcj02ToWgs84, wgs84ToGcj02 } from '../utils/coordTransform'
 import { fetchMapStyle, mapInitializationMessage } from '../utils/mapLoading'
+import { useTheme } from '../composables/useTheme'
 
 import MapSidebar, {
   type SidebarEntry,
@@ -153,7 +154,10 @@ const wrapperRef = ref<HTMLDivElement | null>(null)
 const timelineRef = ref<InstanceType<typeof MapTimeline> | null>(null)
 
 let map: maplibregl.Map | null = null
-const activeLayer = ref('protomaps-dark')
+const { currentTheme } = useTheme()
+const themeLayer = computed(() => `protomaps-${currentTheme.value}`)
+const activeLayer = ref(themeLayer.value)
+let hasCustomBaseLayer = false
 const mapError = ref('')
 const isInitializingMap = ref(false)
 const dataError = ref(false)
@@ -525,6 +529,17 @@ function buildRasterStyle(
 }
 
 let layerRequest = 0
+function selectLayer(layerId: string) {
+  if (!map || isInitializingMap.value) return
+  hasCustomBaseLayer = true
+  void switchLayer(layerId)
+}
+
+// Site themes control the default map only. A deliberate layer choice stays put.
+watch(currentTheme, () => {
+  if (!hasCustomBaseLayer) void switchLayer(themeLayer.value)
+})
+
 async function switchLayer(layerId: string) {
   if (!map || isInitializingMap.value) return
   const layer = baseLayers.find((l) => l.id === layerId)
@@ -1216,13 +1231,18 @@ async function initializeMap() {
   let stage: 'style' | 'renderer' | 'setup' = 'style'
   mapError.value = ''
   try {
-    const initialStyle = await loadVectorStyle('/map-styles/dark.json')
+    const initialLayer = baseLayers.find(
+      (layer) => layer.id === (hasCustomBaseLayer ? activeLayer.value : themeLayer.value)
+    )!
+    const initialStyle = initialLayer.type === 'vector'
+      ? await loadVectorStyle(initialLayer.styleUrl)
+      : buildRasterStyle(initialLayer.id)
     if (disposed) return
     resizeObserver?.disconnect()
     clearMarkers()
     map?.remove()
     map = null
-    activeLayer.value = 'protomaps-dark'
+    activeLayer.value = initialLayer.id
 
     const initialView = resolveInitialView()
 
@@ -1273,6 +1293,10 @@ async function initializeMap() {
     console.error(`地图初始化失败 [${stage}]`, error)
   } finally {
     isInitializingMap.value = false
+    // A theme may change while the initial style is still being downloaded.
+    if (!mapError.value && !hasCustomBaseLayer && activeLayer.value !== themeLayer.value) {
+      void switchLayer(themeLayer.value)
+    }
   }
 }
 
@@ -1581,7 +1605,7 @@ onUnmounted(() => {
   border-radius: 10px;
   overflow: hidden;
   border: 3px solid var(--map-text-primary);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--map-marker-shadow);
   box-sizing: border-box;
   transition:
     box-shadow 0.2s ease,
@@ -1591,7 +1615,7 @@ onUnmounted(() => {
 .marker-anchor:hover .cluster-marker-inner,
 .marker-anchor.is-active .cluster-marker-inner {
   box-shadow:
-    0 6px 22px rgba(0, 0, 0, 0.55),
+    var(--map-marker-shadow-active),
     0 0 0 4px color-mix(in srgb, var(--map-accent) 35%, transparent);
   border-color: var(--map-accent);
 }
@@ -1619,7 +1643,7 @@ onUnmounted(() => {
   text-align: center;
   border-radius: 11px;
   border: 2px solid var(--map-glass-bg-strong);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--map-shadow-sm);
   font-family: system-ui, sans-serif;
 }
 
@@ -1631,7 +1655,7 @@ onUnmounted(() => {
   border-radius: 10px;
   overflow: hidden;
   border: 2px solid var(--map-text-primary);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--map-marker-shadow);
   box-sizing: border-box;
   transition:
     transform 0.2s ease,
@@ -1643,7 +1667,7 @@ onUnmounted(() => {
 .marker-anchor.is-active .point-marker-inner {
   transform: scale(1.1);
   box-shadow:
-    0 5px 16px rgba(0, 0, 0, 0.5),
+    var(--map-marker-shadow-active),
     0 0 0 4px color-mix(in srgb, var(--map-accent) 32%, transparent);
   border-color: var(--map-accent);
   z-index: 10;

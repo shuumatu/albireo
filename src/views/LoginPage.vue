@@ -1,8 +1,11 @@
 <template>
   <div class="login-container">
-    <router-link class="login-home" to="/"
-      >ALBIREO ／ <span>返回首页 ↗</span></router-link
-    >
+    <header class="login-topbar">
+      <router-link class="login-home" to="/"
+        >ALBIREO ／ <span>返回首页 ↗</span></router-link
+      >
+      <ThemeToggle />
+    </header>
     <div class="login-intro">
       <span class="archive-eyebrow">PERSONAL ARCHIVE</span>
       <h2>记录世界，<br />也记录自己。</h2>
@@ -111,6 +114,7 @@ import {
 } from '@vicons/ionicons5'
 import { login, register } from '../api/auth'
 import { saveAuthSession } from '../utils/authSession'
+import ThemeToggle from '../components/ThemeToggle.vue'
 import {
   saveCredential,
   loadCredential,
@@ -246,13 +250,21 @@ async function handleSubmit() {
   background:
     radial-gradient(ellipse at 16% 18%, var(--star-gold-soft), transparent 48%),
     radial-gradient(ellipse at 80% 80%, var(--star-blue-soft), transparent 48%),
-    linear-gradient(90deg, #10151f80, #10151ff2 72%),
+    linear-gradient(90deg, color-mix(in srgb, var(--bg) 76%, transparent), color-mix(in srgb, var(--bg) 96%, transparent) 72%),
     url('../assets/hero/frame-1-1920.webp') center/cover;
 }
-.login-home {
+.login-topbar {
   position: absolute;
-  top: 34px;
+  top: 26px;
   left: 10%;
+  right: 10%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.login-home {
+  position: relative;
   font-size: 20px;
   letter-spacing: 3px;
   font-weight: 700;
@@ -299,6 +311,8 @@ async function handleSubmit() {
   padding: 40px;
   background: color-mix(in srgb, var(--surface) 95%, transparent);
   border: 1px solid var(--line);
+  box-shadow: 0 24px 80px color-mix(in srgb, var(--text) 6%, transparent);
+  backdrop-filter: blur(20px);
   width: 100%;
 }
 .login-header {
@@ -342,8 +356,9 @@ async function handleSubmit() {
     gap: 32px;
     justify-items: center;
   }
-  .login-home {
+  .login-topbar {
     left: 24px;
+    right: 24px;
   }
   .login-intro {
     width: min(100%, 420px);
@@ -359,6 +374,19 @@ async function handleSubmit() {
   .login-card {
     max-width: 420px;
     padding: 28px;
+  }
+}
+@media (max-width: 520px) {
+  .login-home {
+    font-size: 17px;
+    letter-spacing: 2px;
+    padding-left: 29px;
+  }
+  .login-home span {
+    display: none;
+  }
+  .login-topbar {
+    gap: 12px;
   }
 }
 </style>

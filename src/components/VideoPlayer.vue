@@ -463,14 +463,15 @@ watch(() => props.playback, authorizePlayback, { immediate: true })
 .theme-archive {
   --theme-accent: var(--star-blue);
   --theme-accent-dark: var(--star-blue-strong);
-  --theme-accent-light: var(--text);
+  --theme-accent-light: var(--on-photo);
 }
 
 /* 控制栏尺寸调整 */
 .theme-archive .vjs-control-bar {
   height: 3.5em;
   font-size: 14px;
-  background: rgba(0, 0, 0, 0);
+  color: var(--on-photo);
+  background: linear-gradient(transparent, rgb(0 0 0 / 72%));
 }
 
 /* 按钮尺寸 */
@@ -505,11 +506,11 @@ watch(() => props.playback, authorizePlayback, { immediate: true })
 }
 
 .theme-archive .vjs-play-progress {
-  background-color: var(--star-blue);
+  background-color: var(--on-photo-blue);
 }
 
 .theme-archive .vjs-play-progress:before {
-  color: var(--star-blue);
+  color: var(--on-photo-blue);
   font-size: 1.2em;
   text-shadow: none;
 }
@@ -520,16 +521,16 @@ watch(() => props.playback, authorizePlayback, { immediate: true })
 
 /* 音量条 */
 .theme-archive .vjs-volume-level {
-  background-color: var(--star-blue);
+  background-color: var(--on-photo-blue);
 }
 
 .theme-archive .vjs-volume-level:before {
-  color: var(--star-blue);
+  color: var(--on-photo-blue);
 }
 
 /* 按钮悬停效果 */
 .theme-archive .vjs-control:hover {
-  color: var(--star-blue);
+  color: var(--on-photo-blue);
   text-shadow: none;
 }
 .theme-archive .vjs-control:focus-visible,
@@ -541,6 +542,7 @@ watch(() => props.playback, authorizePlayback, { immediate: true })
 /* 菜单背景半透明 */
 .theme-archive .vjs-menu .vjs-menu-content {
   background-color: var(--surface);
+  color: var(--text);
   border: 1px solid var(--line);
 }
 
@@ -642,7 +644,7 @@ watch(() => props.playback, authorizePlayback, { immediate: true })
     display: none;
   }
 }
-.quality-feedback { padding: 8px 12px; margin: 0; color: var(--star-gold); font-size: 13px; background: #151515; }
+.quality-feedback { padding: 8px 12px; margin: 0; color: var(--accent-warm); font-size: 13px; background: var(--surface); }
 .theme-archive .vjs-quality-menu-button { width: 8em; }
 .quality-unavailable { opacity: .4; cursor: not-allowed !important; }
 @media (max-width: 600px) {

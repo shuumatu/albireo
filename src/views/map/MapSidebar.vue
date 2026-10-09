@@ -345,7 +345,7 @@ function onThumbError(event: Event) {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--map-glass-bg-strong);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--map-shadow-sm);
 }
 
 .entry-type-pill {

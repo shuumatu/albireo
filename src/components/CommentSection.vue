@@ -647,11 +647,11 @@ onMounted(() => {
 }
 
 .cs-btn-like:hover:not(:disabled) {
-  color: #e53e3e;
+  color: var(--danger);
 }
 
 .cs-btn-like.is-liked {
-  color: #e53e3e;
+  color: var(--danger);
 }
 
 .cs-btn-like:active:not(:disabled) svg {
@@ -679,8 +679,8 @@ onMounted(() => {
 }
 
 .cs-btn-delete:hover {
-  color: #e53e3e;
-  background: rgba(229, 62, 62, 0.08);
+  color: var(--danger);
+  background: var(--danger-soft);
 }
 
 /* 状态 */
