@@ -13,6 +13,9 @@ export function createAlbireoScrollbars() {
   layer.className = 'albireo-scrollbars'
   document.body.append(layer)
   const entries = new Map<HTMLElement, Entry>()
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
+  const motions = new Map<HTMLElement, { axis: Axis; target: number; position: number; time: number }>()
+  let motionFrame = 0
   let frame = 0, disposed = false
   let drag: { bar: HTMLDivElement; element: HTMLElement; axis: Axis; pointer: number; start: number; offset: number; ratio: number; rtl: boolean } | undefined
   const resize = new ResizeObserver(schedule)
@@ -20,9 +23,58 @@ export function createAlbireoScrollbars() {
   function scrollValue(element: HTMLElement, axis: Axis) {
     return axis === 'vertical' ? element.scrollTop : Math.abs(element.scrollLeft)
   }
-  function setScroll(element: HTMLElement, axis: Axis, value: number) {
+  function writeScroll(element: HTMLElement, axis: Axis, value: number) {
     const rtl = axis === 'horizontal' && getComputedStyle(element).direction === 'rtl'
     element.scrollTo({ [axis === 'vertical' ? 'top' : 'left']: rtl ? -value : value, behavior: 'instant' })
+  }
+  function animateScroll(now: number) {
+    motionFrame = 0
+    for (const [element, motion] of motions) {
+      if (!element.isConnected) { motions.delete(element); continue }
+      // A short time-based follow keeps rapid pointer updates continuous and
+      // finishes at the last requested position after releasing the thumb.
+      const next = motion.position + (motion.target - motion.position) * (1 - Math.exp(-Math.min(48, now - motion.time) / 55))
+      const done = reducedMotion.matches || Math.abs(motion.target - next) < .75
+      writeScroll(element, motion.axis, done ? motion.target : next)
+      motion.position = next
+      motion.time = now
+      if (done) motions.delete(element)
+    }
+    schedule()
+    if (motions.size && !disposed) motionFrame = requestAnimationFrame(animateScroll)
+  }
+  function setScroll(element: HTMLElement, axis: Axis, value: number) {
+    const max = axis === 'vertical' ? element.scrollHeight - element.clientHeight : element.scrollWidth - element.clientWidth
+    const target = Math.max(0, Math.min(max, value))
+    if (axis === 'horizontal' && element.dataset.albireoScrollMotion === 'smooth' && !reducedMotion.matches) {
+      const previous = motions.get(element)
+      motions.set(element, { axis, target, position: previous?.position ?? scrollValue(element, axis), time: previous?.time ?? performance.now() })
+      if (!motionFrame) motionFrame = requestAnimationFrame(animateScroll)
+    } else {
+      motions.delete(element)
+      writeScroll(element, axis, target)
+    }
+    return target
+  }
+  function requestedScroll(element: HTMLElement, axis: Axis) {
+    const motion = motions.get(element)
+    return motion?.axis === axis ? motion.target : scrollValue(element, axis)
+  }
+  function finishReducedMotion() {
+    if (!reducedMotion.matches) return
+    for (const [element, motion] of motions) writeScroll(element, motion.axis, motion.target)
+    motions.clear()
+    cancelAnimationFrame(motionFrame); motionFrame = 0
+    schedule()
+  }
+  function interruptMotion(event: Event) {
+    // Native touch/wheel and a new click take control immediately; an unfinished
+    // scrollbar animation must not pull against the next user interaction.
+    if (event.type === 'pointerdown') motions.clear()
+    else if (event.target instanceof Element) {
+      const element = event.target.closest<HTMLElement>('[data-albireo-scroll-motion="smooth"]')
+      if (element) motions.delete(element)
+    }
   }
   function endDrag() {
     const previous = drag
@@ -54,11 +106,12 @@ export function createAlbireoScrollbars() {
       const max = vertical ? element.scrollHeight - element.clientHeight : element.scrollWidth - element.clientWidth
       const pointer = vertical ? e.clientY : e.clientX
       const rtl = !vertical && getComputedStyle(element).direction === 'rtl'
+      let offset = scrollValue(element, axis)
       if (e.target !== thumb) {
         const fraction = (pointer - (vertical ? rect.top : rect.left) - thumbLength / 2) / Math.max(1, length - thumbLength)
-        setScroll(element, axis, max * (rtl ? 1 - fraction : fraction))
+        offset = setScroll(element, axis, max * (rtl ? 1 - fraction : fraction))
       }
-      drag = { bar, element, axis, pointer: e.pointerId, start: pointer, offset: scrollValue(element, axis), ratio: max / Math.max(1, length - thumbLength), rtl }
+      drag = { bar, element, axis, pointer: e.pointerId, start: pointer, offset, ratio: max / Math.max(1, length - thumbLength), rtl }
       bar.classList.add('is-dragging')
       bar.setPointerCapture(e.pointerId)
       schedule()
@@ -73,7 +126,7 @@ export function createAlbireoScrollbars() {
     bar.addEventListener('keydown', e => {
       const max = axis === 'vertical' ? element.scrollHeight - element.clientHeight : element.scrollWidth - element.clientWidth
       const page = (axis === 'vertical' ? element.clientHeight : element.clientWidth) * .9
-      const current = scrollValue(element, axis)
+      const current = requestedScroll(element, axis)
       const values: Record<string, number> = { Home: 0, End: max, PageUp: current - page, PageDown: current + page,
         ArrowUp: current - 40, ArrowDown: current + 40, ArrowLeft: current - 40, ArrowRight: current + 40 }
       if (e.key in values) { e.preventDefault(); setScroll(element, axis, values[e.key]!); schedule() }
@@ -81,7 +134,7 @@ export function createAlbireoScrollbars() {
     bar.addEventListener('wheel', e => {
       e.preventDefault()
       const amount = (axis === 'horizontal' ? e.deltaX || e.deltaY : e.deltaY) * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? element.clientHeight : 1)
-      setScroll(element, axis, scrollValue(element, axis) + amount)
+      setScroll(element, axis, requestedScroll(element, axis) + amount)
     }, { passive: false })
     layer.append(bar)
     return bar
@@ -110,6 +163,7 @@ export function createAlbireoScrollbars() {
   }
   function remove(entry: Entry) {
     if (drag?.element === entry.element) endDrag()
+    motions.delete(entry.element)
     entry.element.removeAttribute(MANAGED)
     if (!entry.originalId) entry.element.removeAttribute('id')
     resize.unobserve(entry.element)
@@ -182,6 +236,8 @@ export function createAlbireoScrollbars() {
   mutation.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['style', 'class'] })
   mutation.observe(root, { attributes: true, attributeFilter: ['style', 'class'] })
   document.addEventListener('scroll', schedule, true)
+  for (const name of ['wheel', 'pointerdown', 'touchstart']) document.addEventListener(name, interruptMotion, { capture: true, passive: true })
+  reducedMotion.addEventListener('change', finishReducedMotion)
   window.addEventListener('resize', schedule)
   window.addEventListener('blur', endDrag)
   measure()
@@ -194,8 +250,11 @@ export function createAlbireoScrollbars() {
     dispose() {
       disposed = true
       endDrag(); cancelAnimationFrame(frame)
+      cancelAnimationFrame(motionFrame); motions.clear()
       mutation.disconnect(); resize.disconnect()
       document.removeEventListener('scroll', schedule, true)
+      for (const name of ['wheel', 'pointerdown', 'touchstart']) document.removeEventListener(name, interruptMotion, true)
+      reducedMotion.removeEventListener('change', finishReducedMotion)
       window.removeEventListener('resize', schedule)
       window.removeEventListener('blur', endDrag)
       for (const entry of entries.values()) remove(entry)

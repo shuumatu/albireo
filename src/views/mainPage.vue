@@ -85,6 +85,7 @@ onMounted(() => {
       </div>
       <RecommendSection
         title="精选影像"
+        smooth-drag
         eyebrow="01 / SELECTED WORKS"
         subtitle="每一帧，都有来处。"
         :loading="featuredLoading"
@@ -112,6 +113,7 @@ onMounted(() => {
       </div>
       <RecommendSection
         title="旅途回忆"
+        smooth-drag
         subtitle="时间、地点与沿途的故事"
         :loading="tripLoading"
         :error="tripError"
@@ -124,6 +126,7 @@ onMounted(() => {
     <section class="popular-area">
       <RecommendSection
         title="热门作品"
+        smooth-drag
         eyebrow="03 / IN FOCUS"
         :subtitle="hotSubtitle"
         :loading="hotLoading"

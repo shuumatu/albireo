@@ -48,7 +48,13 @@
       </div>
 
       <!-- 正常数据 -->
-      <div v-else ref="rail" class="scroll-rail" @scroll="onScroll">
+      <div
+        v-else
+        ref="rail"
+        class="scroll-rail"
+        :data-albireo-scroll-motion="smoothDrag ? 'smooth' : undefined"
+        @scroll="onScroll"
+      >
         <slot></slot>
       </div>
     </div>
@@ -67,6 +73,8 @@ interface Props {
   emptyText?: string
   /** 是否有数据可展示（外层传入：item 列表的 length > 0） */
   hasItems?: boolean
+  /** 连续拖动滚动条时使用缓动，避免逐张吸附。 */
+  smoothDrag?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -74,7 +82,8 @@ const props = withDefaults(defineProps<Props>(), {
   loading: false,
   error: null,
   emptyText: '',
-  hasItems: false
+  hasItems: false,
+  smoothDrag: false
 })
 
 defineEmits<{
@@ -210,6 +219,10 @@ watch(
 }
 .scroll-rail :slotted(*) {
   scroll-snap-align: start;
+}
+.scroll-rail[data-albireo-scroll-motion='smooth'] {
+  /* A scrollbar drag may stop between cards; snapping each update causes jumps. */
+  scroll-snap-type: none;
 }
 .skeleton-card {
   width: 280px;

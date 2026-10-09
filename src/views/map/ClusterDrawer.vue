@@ -7,7 +7,7 @@
     :height="viewportWidth < 720 ? '60dvh' : undefined"
     :mask-closable="true"
     class="cluster-drawer"
-    to="body"
+    :to="teleportTarget || 'body'"
   >
     <n-drawer-content
       closable
@@ -34,63 +34,48 @@
         </div>
       </template>
 
-      <div class="media-grid">
-        <div
+      <div class="media-grid" :aria-busy="loading">
+        <ClusterMediaCard
           v-for="item in items"
-          :key="item.uuid"
-          class="media-item"
-          role="button"
-          tabindex="0"
-          @keydown.enter="$emit('selectMedia', item)"
-          @keydown.space.prevent="$emit('selectMedia', item)"
-          :aria-label="`查看${item.mediaType === 'video' ? '视频' : '图片'}`"
-          @mouseenter="$emit('hoverMedia', item)"
-          @mouseleave="$emit('hoverMedia', null)"
-          @click="$emit('selectMedia', item)"
-        >
-          <MediaImage :renditions="item.renditions"
-            :src="thumbResolver(item)"
-            class="media-thumb"
-            loading="lazy"
-            :alt="item.uuid"
-          />
-          <div class="media-overlay" />
-          <span class="media-type" :class="item.mediaType">
-            <n-icon
-              :component="
-                item.mediaType === 'video' ? VideocamOutline : ImageOutline
-              "
-              :size="13"
-            />
-          </span>
-        </div>
+          :key="`${item.mediaType}:${item.uuid}`"
+          :item="item"
+          :thumbnail-src="thumbResolver(item)"
+          @select="$emit('selectMedia', item)"
+          @hover="$emit('hoverMedia', $event ? item : null)"
+        />
       </div>
 
-      <div v-if="loading && items.length === 0" class="status-row">
-        <n-spin size="small" />
-        <span>加载中…</span>
+      <div ref="loadMoreSentinel" class="load-more-sentinel" aria-hidden="true" />
+
+      <div v-if="error" class="status-row error" role="alert">
+        <span>{{ error }}</span>
+        <button class="status-button" type="button" :disabled="loading" @click="$emit('retry')">
+          重试
+        </button>
       </div>
-      <div v-else-if="items.length === 0" class="status-row empty">
+      <div v-else-if="loading" class="status-row" role="status" aria-live="polite">
+        <n-spin size="small" />
+        <span>{{ items.length === 0 ? '加载中…' : '加载更多…' }}</span>
+      </div>
+      <div v-else-if="items.length === 0" class="status-row empty" role="status">
         没有可显示的媒体
       </div>
-      <div v-else-if="loading" class="status-row">
-        <n-spin size="small" />
-        <span>加载更多…</span>
+      <div v-else-if="canLoadMore" class="status-row">
+        <button class="status-button" type="button" @click="requestLoadMore">加载更多</button>
       </div>
-      <div v-else-if="items.length >= totalCount" class="status-row end-tip">
-        已到底部 · 共 {{ totalCount }} 项
+      <div v-else class="status-row end-tip" role="status">
+        已到底部 · 已显示 {{ items.length }} 项
       </div>
     </n-drawer-content>
   </n-drawer>
 </template>
 
 <script setup lang="ts">
-import MediaImage from '../../components/MediaImage.vue'
-
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { NDrawer, NDrawerContent, NIcon, NSpin } from 'naive-ui'
 import { VideocamOutline, ImageOutline, LayersOutline } from '@vicons/ionicons5'
 import type { MapPointVO } from '../../api/map'
+import ClusterMediaCard from './ClusterMediaCard.vue'
 
 const props = defineProps<{
   show: boolean
@@ -100,6 +85,9 @@ const props = defineProps<{
   imageCount: number
   loading: boolean
   thumbResolver: (item: MapPointVO) => string
+  error?: string
+  hasMore?: boolean
+  teleportTarget?: string | HTMLElement
 }>()
 
 const emit = defineEmits<{
@@ -107,40 +95,72 @@ const emit = defineEmits<{
   (e: 'hoverMedia', item: MapPointVO | null): void
   (e: 'selectMedia', item: MapPointVO): void
   (e: 'loadMore'): void
+  (e: 'retry'): void
 }>()
 
-// 抽屉打开后窗口仍可能缩放；宽度必须依赖响应式值才能同步更新。
-const viewportWidth = ref(
-  typeof window === 'undefined' ? 480 : window.innerWidth
-)
+const viewportWidth = ref(typeof window === 'undefined' ? 480 : window.innerWidth)
+const drawerWidth = computed(() => Math.min(480, Math.round(viewportWidth.value * 0.9)))
+const canLoadMore = computed(() => props.hasMore ?? props.items.length < props.totalCount)
+const loadMoreSentinel = ref<HTMLElement | null>(null)
+let observer: IntersectionObserver | undefined
+let loadMoreRequested = false
+
 function updateViewportWidth() {
   viewportWidth.value = window.innerWidth
 }
-onMounted(() => window.addEventListener('resize', updateViewportWidth))
-onUnmounted(() => window.removeEventListener('resize', updateViewportWidth))
 
-const drawerWidth = computed(() => {
-  return Math.min(480, Math.round(viewportWidth.value * 0.9))
+function requestLoadMore() {
+  if (!props.show || props.loading || props.error || !canLoadMore.value || loadMoreRequested) return
+  // The observer and scrollbar may report the same boundary in one frame.
+  loadMoreRequested = true
+  emit('loadMore')
+  void nextTick(() => {
+    if (!props.loading) loadMoreRequested = false
+  })
+}
+
+function onScroll(e: Event) {
+  const el = e.target as HTMLElement | null
+  if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 120) requestLoadMore()
+}
+
+function observeSentinel(element: HTMLElement | null, previous?: HTMLElement | null) {
+  if (previous) observer?.unobserve(previous)
+  if (element) observer?.observe(element)
+}
+
+onMounted(() => {
+  window.addEventListener('resize', updateViewportWidth)
+  // An always visible boundary fills short pages even when there is no scroll event.
+  observer = new IntersectionObserver((entries) => {
+    if (entries.some((entry) => entry.target === loadMoreSentinel.value && entry.isIntersecting)) {
+      requestLoadMore()
+    }
+  }, { rootMargin: '0px 0px 120px 0px' })
+  observeSentinel(loadMoreSentinel.value)
 })
 
-/**
- * 通过 n-drawer-content 的 scrollbar-props 注入到内部 NScrollbar 的 onScroll。
- * NScrollbar 触发 scroll 时 e.target 是真正的滚动元素，依此判断「滚到底」。
- */
-function onScroll(e: Event) {
-  if (props.loading) return
-  if (props.items.length >= props.totalCount) return
-  const el = e.target as HTMLElement
-  if (!el) return
-  const distance = el.scrollHeight - el.scrollTop - el.clientHeight
-  if (distance < 120) {
-    emit('loadMore')
-  }
-}
+watch(loadMoreSentinel, observeSentinel, { flush: 'post' })
+watch(
+  () => [props.show, props.loading, props.error, canLoadMore.value, props.items.length] as const,
+  async () => {
+    loadMoreRequested = false
+    await nextTick()
+    // Recheck after layout: appended cards may already have pushed the boundary
+    // outside the viewport, so the preceding intersection result is stale.
+    observeSentinel(loadMoreSentinel.value, loadMoreSentinel.value)
+  },
+  { flush: 'post' }
+)
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateViewportWidth)
+  observer?.disconnect()
+})
 </script>
 
 <style>
-/* n-drawer 会被 teleport 到 body 之外，scoped 选择器追不到，所以走全局样式 */
+/* Drawer content is teleported; these rules are deliberately global and namespaced. */
 .cluster-drawer.n-drawer {
   background: var(--map-glass-bg-strong) !important;
   -webkit-backdrop-filter: var(--map-glass-blur);
@@ -155,9 +175,7 @@ function onScroll(e: Event) {
   background: transparent !important;
 }
 
-.cluster-drawer .n-drawer-header__main {
-  width: 100%;
-}
+.cluster-drawer .n-drawer-header__main { width: 100%; }
 
 .cluster-drawer .drawer-header {
   display: flex;
@@ -209,7 +227,6 @@ function onScroll(e: Event) {
   border-color: color-mix(in srgb, var(--map-image) 35%, transparent);
 }
 
-/* 内置 NScrollbar 的 rail 样式微调 */
 .cluster-drawer .n-scrollbar-rail .n-scrollbar-rail__scrollbar {
   background: var(--map-glass-border-strong) !important;
 }
@@ -220,71 +237,7 @@ function onScroll(e: Event) {
   gap: 8px;
 }
 
-.cluster-drawer .media-item {
-  position: relative;
-  aspect-ratio: 1;
-  border-radius: var(--map-radius-md);
-  overflow: hidden;
-  cursor: pointer;
-  background: var(--bg);
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-.cluster-drawer .media-item:hover {
-  transform: translateY(-2px) scale(1.03);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
-  z-index: 2;
-}
-
-.cluster-drawer :deep(.media-thumb) {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  transition: transform 0.4s ease;
-}
-
-.cluster-drawer .media-item:hover .media-thumb {
-  transform: scale(1.08);
-}
-
-.cluster-drawer .media-overlay {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.55) 0%, transparent 40%);
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.cluster-drawer .media-item:hover .media-overlay {
-  opacity: 1;
-}
-
-.cluster-drawer .media-type {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  width: 22px;
-  height: 22px;
-  border-radius: 7px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--map-glass-bg-strong);
-  color: var(--accent-ink);
-  border: 1px solid var(--map-glass-border);
-}
-
-.cluster-drawer .media-type.video {
-  background: var(--map-video);
-}
-
-.cluster-drawer .media-type.image {
-  background: var(--map-image);
-}
+.cluster-drawer .load-more-sentinel { height: 1px; }
 
 .cluster-drawer .status-row {
   display: flex;
@@ -296,15 +249,26 @@ function onScroll(e: Event) {
   color: var(--map-text-tertiary);
 }
 
+.cluster-drawer .status-row.error {
+  flex-wrap: wrap;
+  color: var(--map-text-primary);
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
 .cluster-drawer .status-row.end-tip,
-.cluster-drawer .status-row.empty {
-  padding: 28px 0 6px;
+.cluster-drawer .status-row.empty { padding: 28px 0 6px; }
+
+.cluster-drawer .status-button {
+  padding: 6px 14px;
+  border: 1px solid var(--map-glass-border-strong);
+  border-radius: var(--map-radius-pill);
+  background: var(--map-glass-bg-strong);
+  color: var(--map-text-primary);
+  font: inherit;
+  cursor: pointer;
 }
-.cluster-drawer .media-item {
-  border-radius: 0;
-}
-.cluster-drawer .media-item:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
+
+.cluster-drawer .status-button:disabled { opacity: 0.6; cursor: wait; }
+.cluster-drawer .status-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </style>

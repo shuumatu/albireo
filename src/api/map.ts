@@ -62,9 +62,11 @@ export function getMapAggregation(params: {
 export function getClusterMedia(
   clusterId: string,
   page = 1,
-  pageSize = 20
+  pageSize = 20,
+  signal?: AbortSignal
 ): Promise<ClusterMediaPage> {
   return request.get(`/api/metadata/map/cluster/${encodeURIComponent(clusterId)}/media`, {
     params: { page, pageSize },
+    signal,
   });
 }

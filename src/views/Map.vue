@@ -95,8 +95,12 @@
       :video-count="currentClusterVideoCount"
       :image-count="currentClusterImageCount"
       :loading="clusterLoading"
+      :error="clusterError"
+      :has-more="clusterHasMore"
+      :teleport-target="tooltipTarget"
       :thumb-resolver="resolveItemThumb"
       @load-more="loadMoreClusterMedia"
+      @retry="retryClusterMedia"
       @select-media="navigateToDetail"
     />
   </div>
@@ -226,10 +230,12 @@ const showClusterPanel = ref(false)
 const clusterMediaList = ref<MapPointVO[]>([])
 const clusterMediaTotal = ref(0)
 const clusterLoading = ref(false)
+const clusterError = ref('')
+const clusterHasMore = ref(false)
 const currentClusterVideoCount = ref(0)
 const currentClusterImageCount = ref(0)
 let currentClusterId = ''
-let currentClusterPage = 1
+let currentClusterPage = 0
 const CLUSTER_PAGE_SIZE = 20
 
 // --- 时间轴状态（由 MapTimeline 子组件 v-model 双向绑定）---
@@ -1039,61 +1045,93 @@ function onFullscreenChange() {
 // --- 簇内媒体 ---
 
 let clusterRequestGeneration = 0
-async function openClusterMedia(cluster: MapClusterVO) {
-  const generation = ++clusterRequestGeneration
+let clusterController: AbortController | null = null
+
+function cancelClusterRequest() {
+  clusterRequestGeneration++
+  clusterController?.abort()
+  clusterController = null
+  clusterLoading.value = false
+}
+
+watch(showClusterPanel, (show) => {
+  if (!show) cancelClusterRequest()
+}, { flush: 'sync' })
+
+function openClusterMedia(cluster: MapClusterVO) {
+  cancelClusterRequest()
   currentClusterId = cluster.clusterId
-  currentClusterPage = 1
+  currentClusterPage = 0
   clusterMediaList.value = []
   clusterMediaTotal.value = cluster.count
+  clusterError.value = ''
+  clusterHasMore.value = true
   currentClusterVideoCount.value = cluster.videoCount
   currentClusterImageCount.value = cluster.imageCount
   showClusterPanel.value = true
+  void fetchClusterPage(1)
+}
 
+async function fetchClusterPage(page: number) {
+  if (disposed || !showClusterPanel.value || clusterLoading.value) return
+  const generation = clusterRequestGeneration
+  const clusterId = currentClusterId
+  const controller = new AbortController()
+  clusterController = controller
   clusterLoading.value = true
+  clusterError.value = ''
   try {
-    const res = await getClusterMedia(cluster.clusterId, 1, CLUSTER_PAGE_SIZE)
-    if (generation !== clusterRequestGeneration) return
-    clusterMediaList.value = res.data
+    const res = await getClusterMedia(clusterId, page, CLUSTER_PAGE_SIZE, controller.signal)
+    if (disposed || generation !== clusterRequestGeneration || clusterId !== currentClusterId) return
+    const seen = new Set(clusterMediaList.value.map(item => `${item.mediaType}:${item.uuid}`))
+    const additions = res.data.filter(item => {
+      const key = `${item.mediaType}:${item.uuid}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    clusterMediaList.value.push(...additions)
     clusterMediaTotal.value = res.total
+    currentClusterPage = page
+    // Use the server's page position: duplicates or a changing total must not
+    // keep the drawer requesting the same exhausted list indefinitely.
+    clusterHasMore.value = additions.length > 0 && (page - 1) * CLUSTER_PAGE_SIZE + res.data.length < res.total
   } catch (e) {
-    console.error('获取簇内媒体失败', e)
+    if (controller.signal.aborted || generation !== clusterRequestGeneration || disposed) return
+    const status = (e as { response?: { status?: number } }).response?.status
+    clusterError.value = status === 400 || status === 404
+      ? '这组媒体已更新，请重试或刷新地图。'
+      : page === 1 ? '媒体暂时无法加载，请重试。' : '加载更多失败，已加载的媒体仍可查看。'
   } finally {
-    if (generation === clusterRequestGeneration) clusterLoading.value = false
+    if (generation === clusterRequestGeneration) {
+      clusterLoading.value = false
+      clusterController = null
+    }
   }
 }
 
-async function loadMoreClusterMedia() {
-  if (clusterLoading.value) return
-  if (clusterMediaList.value.length >= clusterMediaTotal.value) return
-  const nextPage = currentClusterPage + 1
-  const generation = clusterRequestGeneration
-  const clusterId = currentClusterId
-  clusterLoading.value = true
-  try {
-    const res = await getClusterMedia(
-      clusterId,
-      nextPage,
-      CLUSTER_PAGE_SIZE
-    )
-    if (generation !== clusterRequestGeneration || clusterId !== currentClusterId) return
-    currentClusterPage = nextPage
-    clusterMediaList.value.push(...res.data)
-  } catch (e) {
-    console.error('加载更多失败', e)
-  } finally {
-    if (generation === clusterRequestGeneration) clusterLoading.value = false
-  }
+function loadMoreClusterMedia() {
+  if (!clusterHasMore.value || clusterError.value) return
+  void fetchClusterPage(currentClusterPage + 1)
+}
+
+function retryClusterMedia() {
+  void fetchClusterPage(currentClusterPage + 1)
 }
 
 // --- 导航 ---
 
-function navigateToDetail(point: MapPointVO) {
+async function navigateToDetail(point: MapPointVO) {
   const routeLocation =
     point.mediaType === 'video'
       ? { name: 'VideoPlayer', params: { uuid: point.uuid } }
       : { name: 'ImageDetail', params: { uuid: point.uuid } }
 
-  router.push(routeLocation)
+  showClusterPanel.value = false
+  if (document.fullscreenElement === wrapperRef.value) {
+    await document.exitFullscreen().catch(() => {})
+  }
+  await router.push(routeLocation)
 }
 
 // --- 键盘快捷键 ---
@@ -1305,6 +1343,7 @@ function parseBboxQuery(): [[number, number], [number, number]] | null {
 onUnmounted(() => {
   disposed = true
   fetchSeq++
+  cancelClusterRequest()
   if (debounceTimer) clearTimeout(debounceTimer)
   clearMarkers()
   if (map) {
