@@ -5,30 +5,33 @@
     :to="detailRoute"
   >
     <div class="media-thumb">
-      <MediaImage :renditions="item.renditions"
-        v-if="thumbSrc"
-        :src="thumbSrc"
-        :alt="displayTitle"
+      <MediaImage
+        v-if="hasImage && !errored"
+        :key="`${imageSourceKey}-${useThumbnailFallback}`"
+        :renditions="useThumbnailFallback ? undefined : imageRenditions"
+        :src="item.thumbnailUrl"
+        alt=""
         loading="lazy"
         @error="onImageError"
       />
       <div v-else class="media-placeholder">
-        <span class="placeholder-icon">{{
+        <span class="placeholder-icon" aria-hidden="true">{{
           item.itemType === 'video' ? '▶' : '▧'
         }}</span>
+        <span>{{ errored ? '封面暂不可用' : '暂无封面' }}</span>
       </div>
 
-      <span v-if="item.itemType === 'video'" class="video-badge">
-        <span class="play-icon">▶</span>
+      <span v-if="item.itemType === 'video'" class="video-badge" role="img" aria-label="视频">
+        <span class="play-icon" aria-hidden="true">▶</span>
       </span>
 
-      <div class="hover-overlay">
+      <div v-if="item.likeCount > 0 || item.commentCount > 0" class="hover-overlay">
         <div class="overlay-meta">
           <span v-if="item.likeCount > 0" class="meta-pill">
-            <span class="meta-icon">♥</span>{{ item.likeCount }}
+            <span class="meta-icon" aria-hidden="true">♥</span>{{ item.likeCount }}<span class="sr-only"> 个赞</span>
           </span>
           <span v-if="item.commentCount > 0" class="meta-pill">
-            <span class="meta-icon">◇</span>{{ item.commentCount }}
+            <span class="meta-icon" aria-hidden="true">◇</span>{{ item.commentCount }}<span class="sr-only"> 条评论</span>
           </span>
         </div>
       </div>
@@ -44,8 +47,9 @@
 <script setup lang="ts">
 import MediaImage from './MediaImage.vue'
 
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { RecommendItemVO } from '../api/recommend'
+import { imageCandidates } from '../utils/mediaQuality'
 
 interface Props {
   item: RecommendItemVO
@@ -69,11 +73,24 @@ const displayTitle = computed(() => {
 })
 
 const errored = ref(false)
+const useThumbnailFallback = ref(false)
+const imageRenditions = computed(() => [
+  ...imageCandidates(props.item.renditions, 'image/avif'),
+  ...imageCandidates(props.item.renditions, 'image/webp')
+])
+const hasImage = computed(() => Boolean(props.item.thumbnailUrl || imageRenditions.value.length))
+const imageSourceKey = computed(() => JSON.stringify([
+  props.item.itemType,
+  props.item.uuid,
+  props.item.thumbnailUrl,
+  imageRenditions.value
+]))
 
-const thumbSrc = computed(() => {
-  if (errored.value) return ''
-  return props.item.thumbnailUrl || ''
-})
+// Search and refresh can reuse the same card instance for a repaired cover.
+watch([() => props.item, imageSourceKey], () => {
+  errored.value = false
+  useThumbnailFallback.value = false
+}, { flush: 'sync' })
 
 const formattedDate = computed(() => {
   const raw = props.item.shotAt || props.item.createdAt
@@ -87,22 +104,40 @@ const formattedDate = computed(() => {
 })
 
 function onImageError() {
+  // A failed responsive rendition should still try the original cover once.
+  if (!useThumbnailFallback.value && imageRenditions.value.length && props.item.thumbnailUrl) {
+    useThumbnailFallback.value = true
+    return
+  }
   errored.value = true
 }
 </script>
 
 <style scoped>
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .media-card {
   color: var(--text);
   text-decoration: none;
   position: relative;
   width: 280px;
+  max-width: 100%;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   min-width: 0;
   cursor: pointer;
   background: transparent;
+}
+.media-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
 }
 .media-thumb {
   position: relative;
@@ -143,10 +178,16 @@ function onImageError() {
 }
 .media-placeholder {
   height: 100%;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
   color: var(--muted);
   font: 12px var(--mono);
+}
+.placeholder-icon {
+  font-size: 24px;
 }
 .video-badge {
   position: absolute;
@@ -219,6 +260,21 @@ function onImageError() {
 @media (max-width: 700px) {
   .media-card {
     width: 240px;
+  }
+  .hover-overlay {
+    opacity: 1;
+  }
+}
+@media (hover: none) {
+  .hover-overlay {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .media-thumb :deep(img),
+  .media-thumb:after,
+  .hover-overlay {
+    transition: none;
   }
 }
 </style>

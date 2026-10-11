@@ -69,7 +69,7 @@ test('saved light palette is painted before Vue loads and invalid values recover
   test.skip(testInfo.project.name !== 'desktop', 'Bootstrap does not depend on viewport')
   // With the application entry blocked, only the document bootstrap can apply
   // the preference; this catches a flash of dark caused by moving it into Vue.
-  await page.route('**/src/main.ts', route => route.abort())
+  await page.route('**/src/main.ts*', route => route.abort())
   await page.goto('/')
   await page.evaluate(() => localStorage.setItem('albireo-theme', 'light'))
   await page.reload()
@@ -81,7 +81,7 @@ test('saved light palette is painted before Vue loads and invalid values recover
   await page.reload()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
   expect(await luminance(page.locator('html'), 'background-color')).toBeLessThan(.05)
-  await page.unroute('**/src/main.ts')
+  await page.unroute('**/src/main.ts*')
   await page.reload()
   await expectTheme(page, 'dark')
 })

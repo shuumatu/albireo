@@ -222,6 +222,11 @@ export function createAlbireoScrollbars() {
     for (const record of records) {
       if (record.target instanceof Element && record.target.closest(OWN)) continue
       changed = true
+      if (record.type === 'childList' && record.target instanceof HTMLElement) {
+        // Filtering/refreshing a rail invalidates the previous animation target.
+        motions.delete(record.target)
+        if (drag?.element === record.target) endDrag()
+      }
       if (record.type === 'attributes' && record.target instanceof HTMLElement) register(record.target)
       for (const node of record.addedNodes) if (node instanceof Element) {
         inspect(node)

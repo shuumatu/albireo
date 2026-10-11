@@ -12,6 +12,7 @@
       :filter="entryFilter"
       :total-videos="totalVideos"
       :total-images="totalImages"
+      :trip-scoped="hasTripScope"
       @hover-entry="onHoverEntry"
       @select-entry="onSelectEntry"
       @update:filter="entryFilter = $event"
@@ -54,7 +55,7 @@
       <Transition name="chip-fade">
         <div v-if="loading" class="loading-chip glass-panel">
           <n-spin size="small" stroke="var(--map-accent)" />
-          <span>正在加载视口…</span>
+          <span>{{ hasTripScope ? '正在加载旅途…' : '正在加载视口…' }}</span>
         </div>
       </Transition>
 
@@ -71,8 +72,21 @@
           {{ isInitializingMap ? '正在重试…' : '重试' }}
         </button>
       </div>
+      <div
+        v-if="hasTripScope"
+        class="trip-scope glass-panel"
+        role="region"
+        aria-label="旅途范围"
+      >
+        <div>
+          <strong>旅途范围</strong>
+          <span v-if="tripDates">{{ tripDateLabel }}</span>
+          <small>{{ tripDates && tripBounds ? '按日期与拍摄范围浏览' : tripDates ? '按旅途日期浏览' : '按拍摄范围浏览' }}</small>
+        </div>
+        <button type="button" @click="clearTripScope">浏览全部</button>
+      </div>
       <MapTimeline
-        v-if="hasTimeRange && (!mobileViewport || sidebarCollapsed)"
+        v-if="hasTimeRange && !hasTripScope && (!mobileViewport || sidebarCollapsed)"
         :global-min-time="globalMinTime"
         :global-max-time="globalMaxTime"
         :range-start="rangeStart"
@@ -134,8 +148,8 @@ import {
 
 import { getMapAggregation, getClusterMedia } from '../api/map'
 import type { MapPointVO, MapClusterVO } from '../api/map'
-import { gcj02ToWgs84, wgs84ToGcj02 } from '../utils/coordTransform'
 import { fetchMapStyle, mapInitializationMessage } from '../utils/mapLoading'
+import { parseTripBounds, parseTripCenter, parseTripDates, tripCameraBounds } from '../utils/tripMap'
 import { useTheme } from '../composables/useTheme'
 
 import MapSidebar, {
@@ -165,14 +179,18 @@ const hasTimeRange = ref(false)
 const mobileViewport = ref(window.innerWidth < 720)
 let disposed = false
 
-/**
- * 从「旅途回忆」卡片跳过来时，URL 带有 ?bboxMinLng&bboxMinLat&bboxMaxLng&bboxMaxLat&start&end，
- * 老链接也兼容 ?lat&lng&start&end。
- * 时间窗口必须等首次聚合返回 globalMinTime/globalMaxTime 后再映射成 rangeStart/rangeEnd，
- * bbox 则在 onMounted 内用 fitBounds 一次性应用。
- * pendingTimeRange 在首次应用后被清空，不影响后续用户操作。
- */
-let pendingTimeRange: { start: number; end: number } | null = null
+// A fitted viewport expands with the screen aspect ratio. Keep the original
+// WGS84 bounds and calendar dates separate from camera and timeline state.
+const tripBounds = computed(() => parseTripBounds(route.query))
+const tripDates = computed(() => parseTripDates(route.query))
+const hasTripScope = computed(() => !!tripBounds.value || !!tripDates.value)
+const tripDateLabel = computed(() => {
+  const dates = tripDates.value
+  if (!dates) return ''
+  return dates.startDate === dates.endDate
+    ? dates.startDate
+    : `${dates.startDate} — ${dates.endDate}`
+})
 let pendingBbox: [[number, number], [number, number]] | null = null
 
 type BaseLayer =
@@ -292,6 +310,8 @@ let fetchSeq = 0
 // --- 时间工具 ---
 
 function getTimeParams(): { startDate?: string; endDate?: string } {
+  // Includes same-day trips and windows too small to represent on the slider.
+  if (tripDates.value) return tripDates.value
   if (rangeStart.value <= 0 && rangeEnd.value >= 1) return {}
   const fmt = (ts: number) => new Date(ts).toISOString().slice(0, 10)
   return {
@@ -326,10 +346,10 @@ function updateTimelineFromAggregation(data: {
     //  - rangeStart=0（贴左）→ 保持贴左，表达「从最老开始」；
     //  - rangeEnd=1 （贴右）→ 保持贴右，表达「到最新为止」；
     //  - 两端非贴边 → 保持绝对时间不变，只重新映射比例；
-    //  - pendingTimeRange 存在时跳过，避免和 applyPendingTimeRange 打架。
+    // 旅途日期独立传入请求，不受时间轴比例及视口变化影响。
     const oldSpan = globalMaxTime.value - globalMinTime.value
     const newSpan = newMax - newMin
-    const shouldRemap = !pendingTimeRange && oldSpan > 0 && newSpan > 0
+    const shouldRemap = !hasTripScope.value && oldSpan > 0 && newSpan > 0
 
     const anchorLeft = rangeStart.value <= 0
     const anchorRight = rangeEnd.value >= 1
@@ -370,26 +390,6 @@ function updateTimelineFromAggregation(data: {
   }
   nextTick(() => timelineRef.value?.redraw())
 
-  if (pendingTimeRange) {
-    applyPendingTimeRange()
-  }
-}
-
-function applyPendingTimeRange() {
-  if (!pendingTimeRange) return
-  const span = globalMaxTime.value - globalMinTime.value
-  if (span <= 0) return
-
-  const s = clamp((pendingTimeRange.start - globalMinTime.value) / span, 0, 1)
-  const e = clamp((pendingTimeRange.end - globalMinTime.value) / span, 0, 1)
-
-  pendingTimeRange = null
-
-  if (e - s < MIN_RANGE) return
-
-  rangeStart.value = s
-  rangeEnd.value = e
-  debouncedFetch()
 }
 
 // --- 经度归一化 ---
@@ -427,46 +427,6 @@ function normalizeBounds(bounds: maplibregl.LngLatBounds) {
   }
 
   return { minLng: west, minLat: south, maxLng: east, maxLat: north }
-}
-
-/**
- * 把 WGS84 视口 bbox 转成 GCJ02 最小外包矩形。
- * 4 个角各自转换后取 min/max，处理跨国境视口时（境外角点恒等返回）矩形略微膨胀 ~0.006°，
- * 安全地多框入少量境外 WGS84 点，不会漏。
- */
-function bboxToGcj02(b: {
-  minLng: number
-  minLat: number
-  maxLng: number
-  maxLat: number
-}) {
-  const corners: Array<[number, number]> = [
-    wgs84ToGcj02(b.minLng, b.minLat),
-    wgs84ToGcj02(b.minLng, b.maxLat),
-    wgs84ToGcj02(b.maxLng, b.minLat),
-    wgs84ToGcj02(b.maxLng, b.maxLat)
-  ]
-  return {
-    minLng: Math.min(
-      corners[0][0],
-      corners[1][0],
-      corners[2][0],
-      corners[3][0]
-    ),
-    minLat: Math.min(
-      corners[0][1],
-      corners[1][1],
-      corners[2][1],
-      corners[3][1]
-    ),
-    maxLng: Math.max(
-      corners[0][0],
-      corners[1][0],
-      corners[2][0],
-      corners[3][0]
-    ),
-    maxLat: Math.max(corners[0][1], corners[1][1], corners[2][1], corners[3][1])
-  }
 }
 
 // --- 工具函数 ---
@@ -749,8 +709,8 @@ function renderClusters(
   const centerLng = map!.getCenter().lng
   clusters.forEach((cluster) => {
     const { el, motionWrapper } = createClusterMarkerElement(cluster)
-    const [tLng, tLat] = gcj02ToWgs84(cluster.longitude, cluster.latitude)
-    const lng = nearestLng(tLng, centerLng)
+    const tLat = cluster.latitude
+    const lng = nearestLng(cluster.longitude, centerLng)
     const marker = new maplibregl.Marker({ element: el })
       .setLngLat([lng, tLat])
       .addTo(map!)
@@ -780,8 +740,8 @@ function renderPoints(
   const centerLng = map!.getCenter().lng
   points.forEach((point) => {
     const { el, motionWrapper } = createPointMarkerElement(point)
-    const [tLng, tLat] = gcj02ToWgs84(point.longitude, point.latitude)
-    const lng = nearestLng(tLng, centerLng)
+    const tLat = point.latitude
+    const lng = nearestLng(point.longitude, centerLng)
     const marker = new maplibregl.Marker({ element: el })
       .setLngLat([lng, tLat])
       .addTo(map!)
@@ -809,9 +769,11 @@ async function fetchAggregation() {
   if (!map) return
   const seq = ++fetchSeq
   const wgsBounds = normalizeBounds(map.getBounds())
-  // 中国境内的国行设备 EXIF GPS 实际是 GCJ02，DB geom 数值也就是 GCJ02。
-  // 把视口 4 个角各自转成 GCJ02 后取最小外包矩形，再发给后端，避免 ~500m 系统性偏差导致的漏点 / 计数对不上。
-  const bounds = bboxToGcj02(wgsBounds)
+  // The API and every basemap use WGS84; preserve the viewport coordinates.
+  const bbox = tripBounds.value
+  const bounds = bbox
+    ? { minLng: bbox[0][0], minLat: bbox[0][1], maxLng: bbox[1][0], maxLat: bbox[1][1] }
+    : wgsBounds
   const zoom = Math.round(map.getZoom())
   currentZoom.value = zoom
 
@@ -897,10 +859,9 @@ function onSelectEntry(entry: SidebarEntry) {
       (c) => clusterEntryId(c) === entry.id
     )
     if (!cluster) return
-    const [lng, lat] = gcj02ToWgs84(cluster.longitude, cluster.latitude)
     const targetZoom = Math.min((map.getZoom() ?? 0) + 2, 16)
     map.flyTo({
-      center: [lng, lat],
+      center: [cluster.longitude, cluster.latitude],
       zoom: targetZoom,
       duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches
         ? 0
@@ -910,9 +871,8 @@ function onSelectEntry(entry: SidebarEntry) {
   } else {
     const point = currentPoints.value.find((p) => pointEntryId(p) === entry.id)
     if (!point) return
-    const [lng, lat] = gcj02ToWgs84(point.longitude, point.latitude)
     map.flyTo({
-      center: [lng, lat],
+      center: [point.longitude, point.latitude],
       zoom: Math.max(map.getZoom() ?? 0, 14),
       duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches
         ? 0
@@ -1027,6 +987,11 @@ function handleZoomOut() {
 }
 function handleHome() {
   if (!map) return
+  if (hasTripScope.value) {
+    const view = resolveInitialView()
+    if (!fitPendingBounds()) map.flyTo({ ...view, duration: 0 })
+    return
+  }
   // 默认中心广州（广东省会，WGS-84），与初始视图一致
   map.flyTo({
     center: [113.2644, 23.1291],
@@ -1264,14 +1229,7 @@ async function initializeMap() {
     })
 
     map.on('load', () => {
-      if (pendingBbox && map) {
-        map.fitBounds(pendingBbox, {
-          padding: { top: 80, bottom: 160, left: 80, right: 80 },
-          duration: 0,
-          maxZoom: 13
-        })
-        pendingBbox = null
-      }
+      fitPendingBounds()
       fetchAggregation()
     })
 
@@ -1310,59 +1268,73 @@ function resolveInitialView(): { center: [number, number]; zoom: number } {
   let center = defaultView.center
   let zoom = defaultView.zoom
 
-  const bbox = parseBboxQuery()
+  pendingBbox = null
+  const bbox = tripBounds.value
   if (bbox) {
-    const [swLng, swLat] = gcj02ToWgs84(bbox[0][0], bbox[0][1])
-    const [neLng, neLat] = gcj02ToWgs84(bbox[1][0], bbox[1][1])
-    pendingBbox = [
-      [swLng, swLat],
-      [neLng, neLat]
-    ]
+    pendingBbox = tripCameraBounds(bbox)
+    const [[swLng, swLat], [neLng, neLat]] = pendingBbox
     center = [(swLng + neLng) / 2, (swLat + neLat) / 2]
     zoom = 8
   } else {
-    const lat = parseFloat(String(route.query.lat ?? ''))
-    const lng = parseFloat(String(route.query.lng ?? ''))
-    if (
-      Number.isFinite(lat) &&
-      Number.isFinite(lng) &&
-      lat >= -90 &&
-      lat <= 90 &&
-      lng >= -180 &&
-      lng <= 180
-    ) {
-      const [wgsLng, wgsLat] = gcj02ToWgs84(lng, lat)
-      center = [wgsLng, wgsLat]
+    const fallback = parseTripCenter(route.query)
+    if (fallback) {
+      center = fallback
       zoom = 11
-    }
-  }
-
-  const startRaw = route.query.start
-  const endRaw = route.query.end
-  if (typeof startRaw === 'string' && typeof endRaw === 'string') {
-    const startTs = new Date(startRaw).getTime()
-    const endTs = new Date(endRaw).getTime()
-    if (Number.isFinite(startTs) && Number.isFinite(endTs) && endTs > startTs) {
-      pendingTimeRange = { start: startTs, end: endTs }
     }
   }
 
   return { center, zoom }
 }
 
-function parseBboxQuery(): [[number, number], [number, number]] | null {
-  const minLng = parseFloat(String(route.query.bboxMinLng ?? ''))
-  const minLat = parseFloat(String(route.query.bboxMinLat ?? ''))
-  const maxLng = parseFloat(String(route.query.bboxMaxLng ?? ''))
-  const maxLat = parseFloat(String(route.query.bboxMaxLat ?? ''))
-  if (![minLng, minLat, maxLng, maxLat].every(Number.isFinite)) return null
-  if (minLng >= maxLng || minLat >= maxLat) return null
-  if (minLng < -180 || maxLng > 180 || minLat < -90 || maxLat > 90) return null
-  return [
-    [minLng, minLat],
-    [maxLng, maxLat]
-  ]
+function fitPendingBounds(): boolean {
+  if (!pendingBbox || !map) return false
+  const bounds = pendingBbox
+  pendingBbox = null
+  const { clientWidth: width, clientHeight: height } = map.getContainer()
+  map.fitBounds(bounds, {
+    padding: {
+      top: Math.min(80, height * 0.2),
+      bottom: Math.min(150, height * 0.28),
+      left: Math.min(80, width * 0.15),
+      right: Math.min(80, width * 0.2)
+    },
+    duration: 0,
+    maxZoom: 13
+  })
+  return true
 }
+
+function clearTripScope() {
+  const query = { ...route.query }
+  for (const key of ['bboxMinLng', 'bboxMinLat', 'bboxMaxLng', 'bboxMaxLat', 'start', 'end', 'lat', 'lng']) {
+    delete query[key]
+  }
+  void router.replace({ query })
+}
+
+// Vue Router reuses Map for query-only navigation, including the scope exit.
+watch(() => route.fullPath, () => {
+  if (route.name !== 'Map' || !map || disposed) return
+  fetchSeq++
+  if (debounceTimer) clearTimeout(debounceTimer)
+  showClusterPanel.value = false
+  cancelClusterRequest()
+  clearMarkers()
+  currentClusters.value = []
+  currentPoints.value = []
+  totalVideos.value = totalImages.value = 0
+  rangeStart.value = 0
+  rangeEnd.value = 1
+  hasTimeRange.value = false
+  densityBuckets.value = []
+  if (hasTripScope.value || parseTripCenter(route.query)) {
+    const view = resolveInitialView()
+    if (!fitPendingBounds()) map.jumpTo(view)
+  } else {
+    pendingBbox = null
+  }
+  void fetchAggregation()
+})
 
 onUnmounted(() => {
   disposed = true
@@ -1530,10 +1502,70 @@ onUnmounted(() => {
 .map-error span {
   min-width: 0;
 }
+.trip-scope {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 42px;
+  z-index: var(--map-z-floating);
+  width: fit-content;
+  max-width: calc(100% - 32px);
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 16px;
+  color: var(--map-text-primary);
+}
+.trip-scope > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.trip-scope strong {
+  font-size: 13px;
+}
+.trip-scope span {
+  font: 11px var(--mono);
+  overflow-wrap: anywhere;
+}
+.trip-scope small {
+  font-size: 11px;
+  color: var(--map-text-secondary);
+}
+.trip-scope button {
+  min-height: 44px;
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--map-glass-border);
+  background: var(--map-accent-soft);
+  color: var(--map-text-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.trip-scope button:focus-visible {
+  outline: 2px solid var(--map-accent);
+  outline-offset: 3px;
+}
 .map-marker-inner {
   border-radius: 2px;
 }
 @media (max-width: 719px) {
+  .trip-scope {
+    left: 12px;
+    right: 12px;
+    max-width: calc(100% - 24px);
+    gap: 12px;
+    padding: 10px 12px;
+  }
+  .map-wrapper:not(.sidebar-collapsed) .trip-scope {
+    left: 64px;
+    bottom: calc(min(52%, 420px) + 8px);
+    max-width: calc(100% - 76px);
+    flex-wrap: wrap;
+    gap: 6px 12px;
+  }
   .sidebar-handle,
   .map-wrapper.sidebar-collapsed .sidebar-handle {
     top: 12px;

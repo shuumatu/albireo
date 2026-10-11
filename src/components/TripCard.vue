@@ -5,12 +5,14 @@
     :aria-label="`查看${title}的地图`"
   >
     <div class="trip-cover">
-      <MediaImage :renditions="trip.renditions"
-        v-if="trip.coverUrl && !errored"
+      <MediaImage
+        v-if="hasCover && !errored"
+        :key="`${coverSourceKey}-${useCoverFallback}`"
+        :renditions="useCoverFallback ? undefined : coverRenditions"
         :src="trip.coverUrl"
         :alt="title"
         loading="lazy"
-        @error="errored = true"
+        @error="onCoverError"
       />
       <div v-else class="cover-placeholder">⌖</div>
 
@@ -20,7 +22,7 @@
           <div class="trip-date-range">{{ dateRange }}</div>
         </div>
         <div class="trip-meta">
-          <span class="meta-item">▧ {{ trip.itemCount }}</span>
+          <span class="meta-item">▧ {{ trip.itemCount }} 件作品</span>
           <span
             class="meta-item place-meta"
             :title="trip.placeName ? coords : undefined"
@@ -36,8 +38,10 @@
 <script setup lang="ts">
 import MediaImage from './MediaImage.vue'
 
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { TripVO } from '../api/recommend'
+import { tripCalendarDate, tripMapRoute } from '../utils/tripMap'
+import { imageCandidates } from '../utils/mediaQuality'
 
 interface Props {
   trip: TripVO
@@ -45,12 +49,33 @@ interface Props {
 
 const props = defineProps<Props>()
 const errored = ref(false)
+const useCoverFallback = ref(false)
+const coverRenditions = computed(() => [
+  ...imageCandidates(props.trip.renditions, 'image/avif'),
+  ...imageCandidates(props.trip.renditions, 'image/webp')
+])
+const hasCover = computed(() => Boolean(props.trip.coverUrl || coverRenditions.value.length))
+const coverSourceKey = computed(() => JSON.stringify([
+  props.trip.tripId, props.trip.coverUrl, coverRenditions.value
+]))
+watch([() => props.trip, coverSourceKey], () => {
+  errored.value = false
+  useCoverFallback.value = false
+}, { flush: 'sync' })
+
+function onCoverError() {
+  if (!useCoverFallback.value && coverRenditions.value.length && props.trip.coverUrl) {
+    useCoverFallback.value = true
+    return
+  }
+  errored.value = true
+}
 
 const title = computed(() => `${props.trip.year}年${props.trip.month}月的旅途`)
 
 const dateRange = computed(() => {
-  const start = formatDate(props.trip.startDate)
-  const end = formatDate(props.trip.endDate)
+  const start = tripCalendarDate(props.trip.startDate)
+  const end = tripCalendarDate(props.trip.endDate)
   if (!start) return ''
   if (!end || start === end) return start
   return `${start} — ${end}`
@@ -59,36 +84,13 @@ const dateRange = computed(() => {
 const coords = computed(() => {
   const lat = props.trip.centerLat
   const lng = props.trip.centerLng
-  if (typeof lat !== 'number' || typeof lng !== 'number') return ''
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return '地点待补充'
   const ns = lat >= 0 ? 'N' : 'S'
   const ew = lng >= 0 ? 'E' : 'W'
   return `${Math.abs(lat).toFixed(1)}°${ns} ${Math.abs(lng).toFixed(1)}°${ew}`
 })
 
-function formatDate(raw: string | null): string {
-  if (!raw) return ''
-  const d = new Date(raw)
-  if (isNaN(d.getTime())) return ''
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-const tripRoute = computed(() => {
-  // 优先传 bbox：Map.vue 用 fitBounds 让视口紧贴这些媒体，避免视口外溢导致计数对不上
-  return {
-    name: 'Map',
-    query: {
-      bboxMinLng: props.trip.bboxMinLng,
-      bboxMinLat: props.trip.bboxMinLat,
-      bboxMaxLng: props.trip.bboxMaxLng,
-      bboxMaxLat: props.trip.bboxMaxLat,
-      start: props.trip.startDate,
-      end: props.trip.endDate
-    }
-  }
-})
+const tripRoute = computed(() => tripMapRoute(props.trip))
 </script>
 
 <style scoped>
@@ -115,6 +117,10 @@ const tripRoute = computed(() => {
 }
 .trip-card:is(:hover, :focus-visible) :deep(img) {
   transform: scale(1.025);
+}
+.trip-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
 }
 .cover-placeholder {
   height: 100%;
@@ -168,7 +174,7 @@ const tripRoute = computed(() => {
 }
 @media (max-width: 700px) {
   .trip-card {
-    width: 280px;
+    width: min(280px, calc(100vw - 48px));
   }
   .trip-month {
     font-size: 20px;

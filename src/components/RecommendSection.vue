@@ -1,57 +1,77 @@
 <template>
-  <section class="recommend-section">
+  <section class="recommend-section" :aria-labelledby="`${sectionId}-title`">
     <header class="section-header">
       <div class="title-block">
         <span v-if="eyebrow" class="archive-eyebrow">{{ eyebrow }}</span>
-        <h2 class="section-title">{{ title }}</h2>
+        <h2 :id="`${sectionId}-title`" class="section-title">{{ title }}</h2>
         <p v-if="subtitle" class="section-subtitle">{{ subtitle }}</p>
       </div>
-      <div class="scroll-controls" v-if="canScroll">
-        <button
-          class="scroll-btn"
-          :disabled="!canScrollLeft"
-          @click="scrollBy(-1)"
-          aria-label="向左滚动"
-        >
-          ‹
-        </button>
-        <button
-          class="scroll-btn"
-          :disabled="!canScrollRight"
-          @click="scrollBy(1)"
-          aria-label="向右滚动"
-        >
-          ›
-        </button>
+      <div v-if="$slots.actions || canScroll" class="section-actions">
+        <slot name="actions"></slot>
+        <div class="scroll-controls" v-if="canScroll">
+          <button
+            type="button"
+            class="scroll-btn"
+            :disabled="!canScrollLeft"
+            :aria-controls="`${sectionId}-rail`"
+            @click="scrollBy(-1)"
+            aria-label="向左滚动"
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            class="scroll-btn"
+            :disabled="!canScrollRight"
+            :aria-controls="`${sectionId}-rail`"
+            @click="scrollBy(1)"
+            aria-label="向右滚动"
+          >
+            ›
+          </button>
+        </div>
       </div>
     </header>
 
-    <div class="section-body">
+    <slot name="notice"></slot>
+
+    <span class="sr-only" role="status" aria-live="polite">{{
+      loading ? `正在加载${title}…` : !error && !hasItems ? (emptyText || '暂无内容') : ''
+    }}</span>
+
+    <div class="section-body" :aria-busy="loading">
       <!-- 加载中：骨架屏 -->
-      <div v-if="loading" class="scroll-rail skeleton-rail">
-        <div v-for="n in 6" :key="n" class="skeleton-card">
-          <div class="skeleton-thumb"></div>
-          <div class="skeleton-line"></div>
-          <div class="skeleton-line short"></div>
+      <div v-if="loading">
+        <div class="scroll-rail skeleton-rail" aria-hidden="true">
+          <div v-for="n in 6" :key="n" class="skeleton-card">
+            <div class="skeleton-thumb"></div>
+            <div class="skeleton-line"></div>
+            <div class="skeleton-line short"></div>
+          </div>
         </div>
       </div>
 
       <!-- 错误状态 -->
       <div v-else-if="error" class="section-empty">
-        <p>加载失败：{{ error }}</p>
-        <button class="retry-btn" @click="$emit('retry')">重试</button>
+        <p role="alert">加载失败：{{ error }}</p>
+        <button type="button" class="retry-btn" @click="$emit('retry')">重试</button>
       </div>
 
       <!-- 空数据 -->
       <div v-else-if="!hasItems" class="section-empty">
         <p>{{ emptyText || '暂无内容' }}</p>
+        <slot name="empty"></slot>
       </div>
 
       <!-- 正常数据 -->
       <div
         v-else
         ref="rail"
+        :id="`${sectionId}-rail`"
         class="scroll-rail"
+        role="group"
+        :aria-labelledby="`${sectionId}-title`"
+        :tabindex="canScroll ? 0 : undefined"
         :data-albireo-scroll-motion="smoothDrag ? 'smooth' : undefined"
         @scroll="onScroll"
       >
@@ -62,7 +82,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, useId, watch } from 'vue'
 
 interface Props {
   eyebrow?: string
@@ -77,7 +97,7 @@ interface Props {
   smoothDrag?: boolean
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   subtitle: '',
   loading: false,
   error: null,
@@ -91,6 +111,7 @@ defineEmits<{
 }>()
 
 const rail = ref<HTMLElement | null>(null)
+const sectionId = `recommend-${useId()}`
 const canScrollLeft = ref(false)
 const canScrollRight = ref(false)
 const canScroll = computed(() => canScrollLeft.value || canScrollRight.value)
@@ -123,23 +144,49 @@ function scrollBy(direction: -1 | 1) {
 }
 
 let observer: ResizeObserver | undefined
+let mutationObserver: MutationObserver | undefined
+let observedChildren = new Set<Element>()
+
+function observeChildren() {
+  const children = new Set(rail.value?.children || [])
+  for (const child of observedChildren) {
+    if (!children.has(child)) observer?.unobserve(child)
+  }
+  for (const child of children) {
+    if (!observedChildren.has(child)) observer?.observe(child)
+  }
+  observedChildren = children
+  updateScrollState()
+}
+
+function observeRail() {
+  observer?.disconnect()
+  mutationObserver?.disconnect()
+  observedChildren.clear()
+  if (rail.value) {
+    observer?.observe(rail.value)
+    mutationObserver?.observe(rail.value, { childList: true })
+    observeChildren()
+  }
+  updateScrollState()
+}
+
 onMounted(() => {
   observer = new ResizeObserver(updateScrollState)
-  if (rail.value) observer.observe(rail.value)
-  nextTick(updateScrollState)
+  // The rail itself can keep the same width while filtering or resizing cards.
+  mutationObserver = new MutationObserver(() => {
+    // A new result group starts at its first card; stop any native scrollBy
+    // animation before it can carry the new cards toward the previous target.
+    rail.value?.scrollTo({ left: 0, behavior: 'instant' })
+    observeChildren()
+  })
+  observeRail()
 })
-onBeforeUnmount(() => observer?.disconnect())
-watch(rail, (el, old) => {
-  if (old) observer?.unobserve(old)
-  if (el) observer?.observe(el)
+onBeforeUnmount(() => {
+  observer?.disconnect()
+  mutationObserver?.disconnect()
 })
-
-watch(
-  () => [props.loading, props.hasItems],
-  () => {
-    nextTick(updateScrollState)
-  }
-)
+watch(rail, observeRail, { flush: 'post' })
 </script>
 
 <style scoped>
@@ -154,6 +201,15 @@ watch(
   justify-content: space-between;
   gap: 20px;
   margin-bottom: 24px;
+}
+.section-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  flex-shrink: 0;
+  max-width: 100%;
 }
 .title-block {
   position: relative;
@@ -189,6 +245,7 @@ watch(
 .scroll-controls {
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
 }
 .scroll-btn {
   width: 44px;
@@ -204,6 +261,22 @@ watch(
 }
 .scroll-btn:disabled {
   opacity: 0.3;
+}
+.scroll-btn:focus-visible,
+.retry-btn:focus-visible,
+.scroll-rail:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .section-body {
   position: relative;
@@ -225,9 +298,14 @@ watch(
   scroll-snap-type: none;
 }
 .skeleton-card {
-  width: 280px;
+  width: min(280px, 100%);
   flex-shrink: 0;
   background: var(--surface);
+}
+.skeleton-rail {
+  /* Loading placeholders have no content to navigate or accessible scrollbar. */
+  overflow: hidden;
+  scrollbar-width: none;
 }
 .skeleton-thumb {
   aspect-ratio: 4/3;
@@ -267,11 +345,22 @@ watch(
   color: var(--text);
 }
 @media (max-width: 700px) {
+  .section-header {
+    align-items: start;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .section-actions {
+    flex: 1 1 auto;
+  }
   .section-title {
     font-size: 24px;
   }
   .scroll-rail {
     gap: 16px;
+  }
+  .skeleton-card {
+    width: min(240px, 100%);
   }
   .recommend-section {
     padding: 24px 0;

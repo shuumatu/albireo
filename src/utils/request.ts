@@ -26,6 +26,7 @@ request.interceptors.response.use(
     return response.data
   },
   (error) => {
+    if (axios.isCancel(error)) return Promise.reject(error)
     if (error.response?.status === 401) {
       const loginRequest = ['/api/auth/login', '/api/auth/admin-login'].includes(error.config?.url || '')
       const token = localStorage.getItem('token')

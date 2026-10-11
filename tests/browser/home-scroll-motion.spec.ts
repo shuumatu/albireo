@@ -128,3 +128,23 @@ test('touch keeps a native scrollable rail and the shared recommendation default
   // Chrome may omit the default proximity value when serializing this style.
   expect(await related.evaluate(e => getComputedStyle(e).scrollSnapType)).toMatch(/^x(?: proximity)?$/)
 })
+
+test('keyboard filtering cancels an unfinished custom scroll animation', async ({ page, isMobile }, testInfo) => {
+  test.skip(isMobile || testInfo.project.name === 'reduced-motion', 'Animated desktop scrollbar')
+  const { rail, bar } = await homeRail(page)
+  const box = (await bar.boundingBox())!, thumb = (await bar.locator('.albireo-scrollbar-thumb').boundingBox())!
+  await pauseFrames(page)
+  await page.mouse.move(thumb.x + thumb.width / 2, thumb.y + thumb.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(thumb.x + thumb.width / 2 + (box.width - thumb.width) * .5, thumb.y + thumb.height / 2)
+  await page.mouse.up()
+  await page.clock.runFor(32)
+  expect(await rail.evaluate(element => element.scrollLeft)).toBeGreaterThan(0)
+  const section = page.locator('#featured')
+  await section.getByRole('button', { name: '视频 1', exact: true }).press('Enter')
+  await expect(rail.locator('.media-card')).toHaveCount(1)
+  await section.getByRole('button', { name: '全部 12', exact: true }).press('Enter')
+  await page.clock.runFor(800)
+  expect(await rail.evaluate(element => element.scrollLeft)).toBe(0)
+  await expect(section.getByRole('button', { name: '向左滚动' })).toBeDisabled()
+})
